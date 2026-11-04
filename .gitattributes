@@ -1,0 +1,8 @@
+# 줄바꿈 문자를 운영체제와 상관없이 통일 (Windows·Mac 혼용 팀에서 불필요한 변경 기록 방지)
+* text=auto
+*.java text eol=lf
+*.md text eol=lf
+*.properties text eol=lf
+*.sh text eol=lf
+*.bat text eol=crlf
+*.png binary

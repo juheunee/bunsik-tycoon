@@ -1,1 +1,25 @@
+# ---------- 빌드 결과물 ----------
+out/
+bin/
+build/
+*.class
+*.jar
+sources.txt
+
+# ---------- IDE 설정 (사람마다 다름) ----------
+.idea/
+*.iml
+.vscode/
+.project
+.classpath
+.settings/
+
+# ---------- OS가 만드는 파일 ----------
+.DS_Store
+Thumbs.db
+
+# ---------- 개인 설정·로그 (.env 역할) ----------
+config.local.properties
+*.log
+
 .aider*

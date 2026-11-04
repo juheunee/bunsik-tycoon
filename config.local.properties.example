@@ -1,0 +1,6 @@
+# 이 파일을 복사해서 이름을 config.local.properties 로 바꾸면,
+# config.properties 의 값을 내 노트북에서만 덮어쓸 수 있어요. (.env 와 같은 역할, Git에 안 올라감)
+
+# 예) 클라이언트 B 노트북: 서버(A 노트북)의 IP를 기본값으로
+client.host=192.168.0.12
+client.nickname=차민
