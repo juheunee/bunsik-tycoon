@@ -66,7 +66,7 @@
 
 - 타입은 **영어 소문자**
 - 커밋 하나 = 변경 하나
-- 이슈 번호는 맨 뒤 `(#번호)`
+- fix 일 경우, 이슈 번호는 맨 뒤 `(#번호)`
 
 ---
 
@@ -163,7 +163,7 @@ git push -u origin feat/chat
 # 푸시 (이후)
 git push
 
-# 작업 중 main 최신 내용 반영
+# 작업 전 원격의 main 최신 내용 반영 + 현재 작업 중인 브랜치(feat/chat)에 반영
 git switch main
 git pull
 git switch feat/chat
