@@ -22,16 +22,17 @@
 ## 2. 브랜치
 
 ```
-이름/작업종류/짧은 설명
+작업종류/이름/짧은 설명
 ```
 
 | 예시 | |
 |---|---|
-| `gildong/feat/chat` | 채팅 기능 |
-| `gildong/fix/h-key-toggle` | H 키 오류 |
-| `gildong/design/customer-walk` | 손님 걷기 애니메이션 |
-| `gildong/docs/readme-team` | README 팀 정보 |
+| `feat/jh/chat` | 채팅 기능 |
+| `fix/jh/h-key-toggle` | H 키 오류 |
+| `design/cm/customer-walk` | 손님 걷기 애니메이션 |
+| `docs/cm/readme-team` | README 팀 정보 |
 
+- 팀원 식별자는 주흔 `jh` 차민 `cm`이다.
 - 영어 소문자, 단어는 `-`로 연결, 2~4단어
 - 이슈가 있으면 번호 추가: `fix/7-h-key-toggle`
 - `main`에 직접 푸시 금지
