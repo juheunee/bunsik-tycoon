@@ -1,3 +1,5 @@
+package bunsik.server;
+
 import javax.swing.SwingUtilities;
 
 public final class ServerMain {

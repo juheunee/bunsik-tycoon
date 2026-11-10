@@ -1,3 +1,5 @@
+package bunsik.server;
+
 import bunsik.common.Message;
 import bunsik.common.MessageType;
 

@@ -1,3 +1,5 @@
+package bunsik.server;
+
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;
