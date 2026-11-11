@@ -1,2 +1,13 @@
 .aider*
 /.metadata/
+
+/notes/
+config.local.properties
+out/
+*.class
+.classpath
+.project
+.settings/
+.idea/
+*.iml
+.vscode/
