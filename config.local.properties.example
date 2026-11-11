@@ -1,0 +1,4 @@
+# Copy to config.local.properties and set the server PC's LAN address.
+server.host=192.168.0.10
+server.port=9999
+client.connectTimeoutMs=5000
