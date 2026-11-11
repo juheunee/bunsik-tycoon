@@ -81,6 +81,8 @@
 | C→S | `INTERACT` | x \| y | 스페이스 키 |
 | C→S | `COOK` | 메뉴코드 | 접시에 메뉴를 놓음 |
 | C→S | `LEAVE` | - | 정상 종료 |
+| C→S | `CHAT` | 본문 | 1~200 UTF-16 단위 |
+| S→C | `CHAT` | 접속번호 \| 닉네임 \| 본문 | 서버가 발신자 정보를 붙여 중계 |
 | S→C | `WELCOME` | 접속번호 | 접속 확인 |
 | S→C | `REJECT` | 이유 | 입장 거절(대기실 가득 참 등) |
 | S→C | `LOBBY` | 번호:닉네임:준비 … | 대기실 현황 |
@@ -93,6 +95,8 @@
 | S→C | `GAME_OVER` | 승자 \| 인원 \| 닉네임:만족도:판매:골드:손님 … | 결과(승자 -1 무승부, -2 혼자 하기) |
 
 ### 4.1 Message 클래스
+CHAT의 방향별 필드 검사, 입력 제한, 중계 범위는 이 문서의 4.3을 따른다.
+
 `Message`는 메시지를 생성하고 한 줄 문자열로 인코딩하거나 해석한다.
 
 * 생성: `new Message(MessageType 종류, Object... 값들)`
@@ -106,6 +110,104 @@
 
 * `parse`: 빈 줄이거나 알 수 없는 메시지 종류이면 예외를 발생시킨다.
 * `get` 계열 메서드: 요청한 칸이 없거나 숫자로 변환할 값이 숫자가 아니면 예외를 발생시킨다.
+
+---
+
+### 4.3 채팅 규약과 실행 방법
+#### 범위
+
+`feat/jh/text-chat`에서 추가하는 CHAT 규약과 독립 실행 코드다.
+기존 수업 채팅 예제의 readUTF/writeUTF 방식과는 호환되지 않는다.
+게임방과 게임 화면이 아직 없으므로 현재는 별도 서버와 창으로 통신을 확인한다.
+게임 중 Enter로 입력창 열기, 전송 후 게임 포커스 복귀, 게임방별 중계는 후속 작업이다.
+이 규약은 이번 변경의 제안이며 상대 팀원의 리뷰로 확인한다.
+
+#### 필드 형식
+
+UTF-8 한 줄 텍스트이며 송신자가 줄바꿈과 flush를 수행한다.
+
+| 방향 | 예시 | 의미 |
+|---|---|---|
+| C→S | `HELLO|주흔|VERSUS` | 접속 인사. SOLO도 허용 |
+| S→C | `WELCOME|0` | 서버가 부여한 접속번호 |
+| C→S | `CHAT|안녕하세요` | 본문 하나만 보냄 |
+| S→C | `CHAT|0|주흔|안녕하세요` | 접속번호, 닉네임, 본문 |
+| C→S | `LEAVE` | 연결 종료 요청 |
+| S→C | `TOAST|Invalid chat message` | 잘못된 요청 안내 |
+
+클라이언트가 보낸 닉네임·번호를 채팅 발신자 정보로 신뢰하지 않는다.
+서버는 최초 HELLO에서 보관한 닉네임과 자체 발급한 번호를 붙인다.
+같은 닉네임도 가능하지만 접속번호는 다르다. HELLO는 닉네임 1~20 UTF-16 단위와 모드를 검사한다.
+최초 HELLO 대기는 10초 후 종료된다. 이후 유휴 연결에는 별도 제한이 없다.
+
+CHAT 본문은 Message의 `|`, CR, LF 공백 치환 뒤 앞뒤 공백을 제거한다.
+빈 본문은 거절하며 길이는 Java String.length 기준 200 이하이다.
+이모지 등 서로게이트 쌍은 두 단위로 계산한다. 길이를 초과하면 잘라 보내지 않고 거절한다.
+본문의 원래 구분자와 줄바꿈은 복원되지 않는다. 콜론과 쉼표는 본문에서 허용한다.
+요청 필드는 정확히 1개, 응답은 정확히 3개여야 한다.
+잘못된 채팅 요청은 TOAST로 알리고 수신 루프는 유지한다.
+
+#### 코드 역할과 사용법
+
+- `common/ChatMessages.java`: 요청 생성·검사, 서버 응답 생성, 표시 문자열 변환.
+- `chat/ChatServerMain.java`: 접속별 수신 스레드, HELLO 등록, CHAT 중계와 연결 정리.
+- `chat/ChatClientMain.java`: 닉네임 입력, 비동기 접속·수신·송신, Swing 채팅 표시.
+
+```java
+Message request = ChatMessages.request("안녕하세요");
+Message response = ChatMessages.broadcast(0, "주흔", request);
+String display = ChatMessages.display(response); // [주흔] 안녕하세요
+```
+
+검증 서버는 등록된 모든 접속자에게 보낸 사람을 포함해 중계한다.
+현재 최대 2명 제한과 게임방 격리는 없으므로 실제 게임 서버의 대체물이 아니다.
+추후 ClientHandler에서 requestText를 검사하고 같은 GameRoom 참가자에게만 broadcast 결과를 전송한다.
+채팅은 점수나 게임 상태를 수정하지 않는다. 게임 상태를 바꾸는 처리는 게임 루프 대기줄로 넘긴다.
+Peer.send는 동기화해 여러 수신 스레드가 같은 소켓에 쓰는 한 줄이 섞이지 않게 한다.
+모든 접속자 사이의 전역 메시지 순서를 보장하지는 않는다.
+현재는 로컬·수업 LAN 검증용이다. 메시지 빈도 제한, 최대 수신 줄 길이, 느린 수신자 분리는 후속 보완 항목이다.
+
+클라이언트의 네트워크 작업은 EDT 밖에서 수행한다. 수신 결과와 연결 상태의 화면 변경은 invokeLater로 전달한다.
+채팅 창에서 Enter를 누르면 전송하고 입력란을 비운다. 게임 조작 포커스는 아직 없다.
+창을 닫으면 소켓과 송신 executor를 종료한다. 소켓 EOF로 서버가 참가자를 제거한다.
+
+#### 실행
+
+JDK 21 이상이 필요하다. 저장소 루트 `C:\bunsik-tycoon`에서 다음을 실행한다.
+
+```powershell
+.\verify-foundation.cmd
+```
+
+이 명령은 모든 src Java 파일을 컴파일하고 기반 검증을 수행한다.
+cmd에서도 `verify-foundation.cmd`로 실행할 수 있다. PowerShell의 `$sourceFiles` 변수가 필요 없다.
+
+터미널 1개에서 서버를 실행하고 다른 터미널 2개에서 클라이언트를 실행한다.
+
+```powershell
+java -cp out bunsik.chat.ChatServerMain
+```
+
+```powershell
+java -cp out bunsik.chat.ChatClientMain
+```
+
+클라이언트마다 다른 닉네임을 입력하고 양방향 메시지, 자기 메시지 표시, 빈 입력,
+200자 초과 입력, 창 닫기, 서버 종료 시 안내를 확인한다.
+설정 로딩은 AppConfig를 사용한다. 다른 PC 접속 시 config.local.properties에 서버 LAN IP를 적는다.
+기본 포트는 9999이며 두 노트북의 포트를 맞춘다.
+FoundationTest만 성공한 것은 실제 채팅 통신 성공을 뜻하지 않는다.
+
+GUI 없이 자동 소켓 검증을 실행하려면 다음을 실행한다.
+
+```powershell
+javac --release 21 -encoding UTF-8 -cp out -d out BunsikTycoon/test/bunsik/chat/ChatIntegrationTest.java
+java -cp out bunsik.chat.ChatIntegrationTest
+```
+
+이 검증은 테스트 전용 디렉터리와 임시 포트에서 서버 프로세스를 실행한다.
+두 접속자의 한글 양방향 중계, 발신자 위조 거절과 그 뒤 정상 통신을 확인한다.
+GUI 조작과 두 노트북 실전 검증은 별도로 수행해야 한다.
 
 ---
 
