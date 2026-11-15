@@ -1,5 +1,7 @@
 package bunsik.server;
 
+import bunsik.common.AppConfig;
+
 import javax.swing.BorderFactory;
 import javax.swing.JButton;
 import javax.swing.JFrame;
@@ -29,9 +31,9 @@ public final class ServerFrame extends JFrame {
 
     private static final long serialVersionUID = 1L;
     private static final DateTimeFormatter TIME = DateTimeFormatter.ofPattern("HH:mm:ss");
-    private static final String DEFAULT_PORT = "5000";
+    private static final int FALLBACK_PORT = 9999;
 
-    private final JTextField portField = new JTextField(DEFAULT_PORT, 6);
+    private final JTextField portField = new JTextField(String.valueOf(defaultPort()), 6);
     private final JButton startButton = new JButton("서버 시작");
     private final JLabel countLabel = new JLabel("접속자 0명");
     private final JTextArea logArea = new JTextArea();
@@ -108,6 +110,15 @@ public final class ServerFrame extends JFrame {
     /** 접속자 수 표시 갱신 */
     public void setClientCount(int count) {
         SwingUtilities.invokeLater(() -> countLabel.setText("접속자 " + count + "명"));
+    }
+
+    /** config.properties의 서버 포트 (읽기 실패 시 9999) */
+    private static int defaultPort() {
+        try {
+            return AppConfig.load().serverPort();
+        } catch (IOException | IllegalArgumentException e) {
+            return FALLBACK_PORT;
+        }
     }
 
     private static List<String> localAddresses() {

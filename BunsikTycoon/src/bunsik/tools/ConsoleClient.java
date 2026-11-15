@@ -1,5 +1,7 @@
 package bunsik.tools;
 
+import bunsik.common.AppConfig;
+
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
 import java.io.IOException;
@@ -21,9 +23,10 @@ public final class ConsoleClient {
         Scanner scanner = new Scanner(System.in, StandardCharsets.UTF_8);
         System.out.print("서버 IP (Enter: localhost) > ");
         String host = scanner.nextLine().trim();
-        System.out.print("포트 (Enter: 5000) > ");
+        int defaultPort = defaultPort();
+        System.out.print("포트 (Enter: " + defaultPort + ") > ");
         String portText = scanner.nextLine().trim();
-        int port = portText.isEmpty() ? 5000 : Integer.parseInt(portText);
+        int port = portText.isEmpty() ? defaultPort : Integer.parseInt(portText);
 
         try (Socket socket = new Socket(host.isEmpty() ? "localhost" : host, port)) {
             BufferedReader in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
@@ -58,6 +61,15 @@ public final class ConsoleClient {
                 out.newLine();
                 out.flush();
             }
+        }
+    }
+
+    /** config.properties의 서버 포트 (읽기 실패 시 9999) */
+    private static int defaultPort() {
+        try {
+            return AppConfig.load().serverPort();
+        } catch (IOException | IllegalArgumentException e) {
+            return 9999;
         }
     }
 }
