@@ -51,13 +51,27 @@ public final class GameServer {
         }
     }
 
-    void onHello(ClientHandler h) {
-        h.send(MessageType.WELCOME, h.id());
-        log("입장: #" + h.id() + " " + h.nickname());
+    /** first: 이 연결의 첫 HELLO 여부 (다시 하기는 HELLO 재전송) */
+    void onHello(ClientHandler h, boolean versus, boolean first) {
+        if (first) {
+            h.send(MessageType.WELCOME, h.id());
+            log("입장: #" + h.id() + " " + h.nickname());
+        }
+        if (versus) {
+            h.send(MessageType.REJECT, "경쟁 모드는 아직 준비 중이에요.");
+            h.close();
+            return;
+        }
+        log("혼자 하기: " + h.nickname());
+        new GameRoom(this, List.of(h), false, null).start();
     }
 
     void onDisconnect(ClientHandler h) {
         clients.remove(h);
+        GameRoom r = h.room();
+        if (r != null) {
+            r.onPlayerLeft(h);
+        }
         frame.setClientCount(clients.size());
         log("연결 종료: #" + h.id() + " " + h.nickname());
     }
