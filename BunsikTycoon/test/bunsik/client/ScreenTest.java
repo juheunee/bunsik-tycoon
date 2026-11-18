@@ -17,6 +17,7 @@ public final class ScreenTest {
                 Files.createDirectories(Path.of("out/screens"));
                 var sent=new ArrayList<Menu>();var closed=new int[1];
                 GamePanel game=new GamePanel(m->{},()->{});
+                check(bunsik.client.render.Sprites.image("/missing-test-image.png").isEmpty(),"missing image must allow fallback");
                 var tables=List.of(new StoreSnapshot.TableView(TableState.WAITING_FOOD,Menu.TTEOKBOKKI,520,0,3),
                         new StoreSnapshot.TableView(TableState.EATING,Menu.GIMBAP,-1,0,8),
                         new StoreSnapshot.TableView(TableState.DIRTY,null,-1,41,0),
@@ -24,6 +25,13 @@ public final class ScreenTest {
                 StoreSnapshot state=new StoreSnapshot(0,128000,214,7,6,84,238,253,false,Menu.TTEOKBOKKI,null,0,0,tables,
                         List.of(new StoreSnapshot.CustomerView(900,5),new StoreSnapshot.CustomerView(250,16)));
                 game.setState(state);game.names("주흔","차민");game.notice("");render(game,"game");
+                BufferedImage populated=ImageIO.read(Path.of("out/screens/game.png").toFile());
+                game.setState(StoreSnapshot.empty());render(game,"empty");
+                BufferedImage empty=ImageIO.read(Path.of("out/screens/empty.png").toFile());
+                boolean changed=false;
+                for(int y=0;y<700&&!changed;y++)for(int x=0;x<1200;x++)if(populated.getRGB(x,y)!=empty.getRGB(x,y)){changed=true;break;}
+                check(changed,"different snapshots must change rendering");
+                game.setState(state);
                 render(new TitlePanel(c->{},()->{}),"title");
                 var kitchen=new KitchenOverlay(sent::add,()->closed[0]++,()->{});game.setKitchen(kitchen);game.doLayout();
                 kitchen.open(StoreSnapshot.empty());render(game,"kitchen");

@@ -17,6 +17,7 @@ public final class NetworkClient implements AutoCloseable {
     private final Consumer<String> disconnected;
     private volatile Socket socket;
     private volatile boolean closed;
+    private boolean started;
     private BufferedWriter writer;
 
     public NetworkClient(Consumer<Message> receiver, Consumer<String> disconnected) {
@@ -25,7 +26,14 @@ public final class NetworkClient implements AutoCloseable {
     public void connect(AppConfig config, String nickname) {
         connect(config.serverHost(), config.serverPort(), config.connectTimeoutMs(), nickname, "SOLO");
     }
-    public void connect(String host, int port, int timeoutMs, String nickname, String mode) {
+    public synchronized void connect(String host, int port, int timeoutMs, String nickname, String mode) {
+        if (closed || started) throw new IllegalStateException("Connection already started or closed");
+        if (host == null || host.isBlank() || port < 1 || port > 65535 || timeoutMs < 1
+                || nickname == null || nickname.isBlank() || nickname.length() > 20
+                || !("SOLO".equals(mode) || "VERSUS".equals(mode))) {
+            throw new IllegalArgumentException("Invalid connection settings");
+        }
+        started = true;
         sender.execute(() -> {
             try {
                 Socket connection = new Socket();
@@ -37,7 +45,7 @@ public final class NetworkClient implements AutoCloseable {
                 write(new Message(MessageType.HELLO, nickname, mode));
                 Thread reader = new Thread(() -> read(connection), "game-receiver");
                 reader.setDaemon(true); reader.start();
-            } catch (IOException e) { fail("접속 실패: " + e.getMessage()); }
+            } catch (IOException | IllegalArgumentException e) { fail("접속 실패: " + e.getMessage()); }
         });
     }
     private void read(Socket connection) {
@@ -71,6 +79,8 @@ public final class NetworkClient implements AutoCloseable {
         closed = true;
         Socket connection = socket;
         if (connection != null) try { connection.close(); } catch (IOException ignored) { }
-        sender.shutdownNow();
+        // Socket.close unblocks I/O; queued sends observe closed and do no work.
+        // Do not interrupt the sender itself before it posts the EDT failure callback.
+        sender.shutdown();
     }
 }
