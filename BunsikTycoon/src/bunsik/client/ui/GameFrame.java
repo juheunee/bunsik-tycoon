@@ -16,6 +16,8 @@ public final class GameFrame extends JFrame {
     private NetworkClient network;
     private int slot,myId,session;
     private boolean preview;
+    private boolean started, hasState;
+    private int countdown = -1;
     private TitlePanel.Connection connection;
     private Timer previewCook;
     public GameFrame(boolean preview) {
@@ -43,7 +45,7 @@ public final class GameFrame extends JFrame {
         if(preview)preview("식당");
     }
     private void connect(TitlePanel.Connection settings) {
-        disconnect();preview=false;connection=settings;slot=0;myId=-1;
+        disconnect();preview=false;started=false;hasState=false;countdown=-1;setTitle("도전! 분식왕 · 서버 연결 (게임 시작 대기)");connection=settings;slot=0;myId=-1;
         kitchen.setVisible(false);game.countdown(0);game.setBlocked(true);
         game.setState(StoreSnapshot.empty());game.opponent(null);game.names(settings.nickname(),"상대");
         int current=session;
@@ -59,11 +61,46 @@ public final class GameFrame extends JFrame {
     private void onMessage(Message m) {
         try {
             switch(m.type()){
-                case WELCOME -> {myId=m.getInt(0);showGame();game.setBlocked(true);game.notice("접속 완료 · 서버의 START를 기다립니다.");}
+                case WELCOME -> {myId=m.getInt(0);showGame();game.setBlocked(true);game.notice("접속 확인 · START/STATE 대기 (현재 서버 게임 기능 미구현)");}
                 case LOBBY -> {kitchen.setVisible(false);game.setBlocked(true);lobby.update(m,myId);show(lobby);}
-                case START -> {slot=m.getInt(0);int count=m.getInt(1);if(slot<0||slot>=count||count<1||count>2)throw new IllegalArgumentException("Invalid START");game.names(m.get(slot+2),count==2?m.get((1-slot)+2):"상대");showGame();game.countdown(3);game.notice("");}
-                case COUNTDOWN -> {int count=m.getInt(0);if(count<0||count>3)throw new IllegalArgumentException("Invalid countdown");game.countdown(count);game.notice("");}
-                case STATE -> {var state=StoreSnapshot.fromMessage(m);if(state.slot()==slot)game.setState(state);else game.opponent(state);}
+                case START -> {
+                    int nextSlot = m.getInt(0);
+                    int count = m.getInt(1);
+                    if (nextSlot < 0 || nextSlot >= count || count < 1 || count > 2 || m.size() < count + 2) {
+                        throw new IllegalArgumentException("Invalid START");
+                    }
+                    slot = nextSlot;
+                    started = true;
+                    hasState = false;
+                    countdown = 3;
+                    setTitle("도전! 분식왕");
+                    game.names(m.get(slot + 2), count == 2 ? m.get(1 - slot + 2) : "상대");
+                    showGame();
+                    game.countdown(3);
+                    game.notice("");
+                }
+                case COUNTDOWN -> {
+                    int count = m.getInt(0);
+                    if (!started || count < 0 || count > 3) throw new IllegalArgumentException("Invalid countdown");
+                    countdown = count;
+                    game.countdown(count);
+                    game.setBlocked(count != 0 || !hasState || kitchen.isVisible());
+                    game.notice(count == 0 && !hasState ? "서버 STATE 대기 중" : "");
+                }
+                case STATE -> {
+                    if (!started) throw new IllegalArgumentException("STATE before START");
+                    var state = StoreSnapshot.fromMessage(m);
+                    if (state.slot() == slot) {
+                        game.setState(state);
+                        if (!hasState) {
+                            hasState = true;
+                            game.setBlocked(countdown != 0 || kitchen.isVisible());
+                            if (countdown == 0) game.notice("");
+                        }
+                    } else {
+                        game.opponent(state);
+                    }
+                }
                 case OPEN_KITCHEN -> {game.setBlocked(true);kitchen.open(game.state());}
                 case COOK_DONE -> {Menu.valueOf(m.get(0));game.notice("요리 완료! 손님에게 서빙해 주세요.");}
                 case TOAST -> {game.notice(m.get(0));kitchen.rejected(m.get(0));}
@@ -71,14 +108,14 @@ public final class GameFrame extends JFrame {
                 case REJECT -> showTitle(m.get(0));
                 default -> { }
             }
-        }catch(IllegalArgumentException e){game.notice("서버 메시지 형식 오류: "+e.getMessage());}
+        }catch(IllegalArgumentException e){showTitle("서버 메시지 형식 오류: "+e.getMessage());}
     }
     private void show(JPanel panel){setContentPane(panel);revalidate();repaint();}
     private void showGame(){show(game);game.requestFocusInWindow();}
-    private void showTitle(String reason){disconnect();preview=false;kitchen.setVisible(false);game.setBlocked(true);title.reset(reason);show(title);}
+    private void showTitle(String reason){disconnect();preview=false;setTitle("도전! 분식왕");kitchen.setVisible(false);game.setBlocked(true);title.reset(reason);show(title);}
     private void disconnect(){session++;if(previewCook!=null){previewCook.stop();previewCook=null;}if(network!=null){network.close();network=null;}}
     private void preview(String screen) {
-        disconnect();preview=true;slot=0;game.names("주흔","차민");game.opponent(null);kitchen.setVisible(false);
+        disconnect();preview=true;setTitle("도전! 분식왕 · 화면 미리보기 (서버 연결 없음)");slot=0;game.names("주흔","차민");game.opponent(null);kitchen.setVisible(false);
         if(screen.equals("시작")){title.reset("화면 미리보기 · 실제 접속은 서버 실행 후 모드를 선택하세요.");show(title);return;}
         if(screen.equals("결과")){result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"));show(result);return;}
         if(screen.equals("대기실")){lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);show(lobby);return;}
