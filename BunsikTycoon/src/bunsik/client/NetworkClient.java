@@ -16,7 +16,7 @@ public final class NetworkClient implements AutoCloseable {
     private final Consumer<Message> receiver;
     private final Consumer<String> disconnected;
     private volatile Socket socket;
-    private volatile boolean closed;
+    private volatile boolean closed, leaving;
     private boolean started;
     private BufferedWriter writer;
 
@@ -40,6 +40,7 @@ public final class NetworkClient implements AutoCloseable {
                 socket = connection;
                 if (closed) { connection.close(); return; }
                 connection.connect(new InetSocketAddress(host, port), timeoutMs);
+                if (leaving) { close(); return; }
                 connection.setTcpNoDelay(true);
                 writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream(), StandardCharsets.UTF_8));
                 write(new Message(MessageType.HELLO, nickname, mode));
@@ -62,18 +63,39 @@ public final class NetworkClient implements AutoCloseable {
         } catch (IOException e) { fail("서버 연결이 끊겼습니다."); }
     }
     public void send(Message message) {
-        if (closed) return;
+        if (closed || leaving) return;
         try { sender.execute(() -> {
-            try { if (!closed && writer != null) write(message); }
+            try { if (!closed && !leaving && writer != null) write(message); }
             catch (IOException e) { fail("전송 실패"); }
         }); } catch (RejectedExecutionException ignored) { }
     }
+    /** Stop gameplay sends, then deliver LEAVE on the same writer before closing. */
+    public synchronized void leave() {
+        if (closed || leaving) return;
+        leaving = true;
+        try {
+            sender.execute(() -> {
+                try {
+                    if (!closed && writer != null) write(new Message(MessageType.LEAVE));
+                } catch (IOException ignored) {
+                    // EOF also removes the session on the server.
+                } finally {
+                    close();
+                }
+            });
+        } catch (RejectedExecutionException e) {
+            close();
+        }
+    }
+
     private void write(Message message) throws IOException {
         writer.write(message.encode()); writer.newLine(); writer.flush();
     }
     private synchronized void fail(String reason) {
         if (closed) return;
-        close(); SwingUtilities.invokeLater(() -> disconnected.accept(reason));
+        boolean report = !leaving;
+        close();
+        if (report) SwingUtilities.invokeLater(() -> disconnected.accept(reason));
     }
     @Override public synchronized void close() {
         closed = true;
