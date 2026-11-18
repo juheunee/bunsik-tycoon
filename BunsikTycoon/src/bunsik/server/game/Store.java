@@ -166,6 +166,9 @@ public final class Store {
         }
         onMove(x, y, chef.facingLeft);
 
+     // 인내심 0 손님 먼저 퇴장 (같은 틱의 update보다 행동이 먼저 처리되므로)
+        dropImpatientCustomers(now);
+        
         if (nearKitchen(chef.x, chef.y)) {
             interactKitchen();
             return;
