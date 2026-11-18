@@ -46,6 +46,7 @@ public final class GameFrame extends JFrame {
         disconnect();
         preview = false;
         phase = Phase.CONNECTING;
+        setTitle("도전! 분식왕 · 게임 시작 대기");
         connection = settings;
         slot = 0;
         myId = -1;
@@ -108,6 +109,7 @@ public final class GameFrame extends JFrame {
                     slot = nextSlot;
                     playerCount = count;
                     phase = Phase.COUNTDOWN;
+                    setTitle("도전! 분식왕");
                     game.names(m.get(slot + 2), count == 2 ? m.get(3 - slot) : "상대");
                     game.countdown(3);
                     game.notice("");
@@ -182,6 +184,7 @@ public final class GameFrame extends JFrame {
         disconnect();
         preview = false;
         phase = Phase.IDLE;
+        setTitle("도전! 분식왕");
         updateInput();
         title.reset(reason);
         show(title);
@@ -197,7 +200,7 @@ public final class GameFrame extends JFrame {
     }
 
     private void preview(String screen) {
-        disconnect();phase=Phase.IDLE;preview=true;slot=0;game.names("주흔","차민");game.opponent(null);game.resetSessionInput();
+        disconnect();phase=Phase.IDLE;preview=true;setTitle("도전! 분식왕 · 화면 미리보기");slot=0;game.names("주흔","차민");game.opponent(null);game.resetSessionInput();
         if(screen.equals("시작")){title.reset("화면 미리보기 · 실제 접속은 서버 실행 후 모드를 선택하세요.");show(title);return;}
         if(screen.equals("결과")){result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"));show(result);return;}
         if(screen.equals("대기실")){lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);show(lobby);return;}

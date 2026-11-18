@@ -16,6 +16,7 @@ public final class ScreenTest {
                 Files.createDirectories(Path.of("out/screens"));
                 var actions=new ArrayList<Message>();
                 GamePanel game=new GamePanel(actions::add,()->{});
+                check(bunsik.client.render.Sprites.image("/missing-test-image.png").isEmpty(),"missing image must allow fallback");
                 var tables=List.of(new StoreSnapshot.TableView(TableState.WAITING_FOOD,Menu.TTEOKBOKKI,520,0,3),
                         new StoreSnapshot.TableView(TableState.EATING,Menu.GIMBAP,-1,0,8),
                         new StoreSnapshot.TableView(TableState.DIRTY,null,-1,41,0),
@@ -23,6 +24,13 @@ public final class ScreenTest {
                 StoreSnapshot state=new StoreSnapshot(0,128000,214,7,6,84,238,253,false,Menu.TTEOKBOKKI,null,0,0,tables,
                         List.of(new StoreSnapshot.CustomerView(900,5),new StoreSnapshot.CustomerView(250,16)));
                 game.setState(state);game.names("주흔","차민");game.notice("");render(game,"game");
+                BufferedImage populated=ImageIO.read(Path.of("out/screens/game.png").toFile());
+                game.setState(StoreSnapshot.empty());render(game,"empty");
+                BufferedImage empty=ImageIO.read(Path.of("out/screens/empty.png").toFile());
+                boolean changed=false;
+                for(int y=0;y<700&&!changed;y++)for(int x=0;x<1200;x++)if(populated.getRGB(x,y)!=empty.getRGB(x,y)){changed=true;break;}
+                check(changed,"different snapshots must change rendering");
+                game.setState(state);
                 render(new TitlePanel(c->{},()->{}),"title");
                 var station=StoreLayout.COOK_STATIONS.getFirst();
                 var second=StoreLayout.COOK_STATIONS.get(1);
@@ -82,7 +90,7 @@ public final class ScreenTest {
                 var result=new ResultPanel(()->{},()->{});result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"));render(result,"result");
                 try {result.showResult(new Message(MessageType.GAME_OVER,2,1,"주흔:84:21:742:25"));throw new AssertionError("invalid winner");}catch(IllegalArgumentException expected){}
                 var lobby=new LobbyPanel(b->{},()->{});lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);render(lobby,"lobby");
-                System.out.println("ScreenTest: PASS (9 renders, keyboard targets, cook/serve/discard locks, result validation)");
+                System.out.println("ScreenTest: PASS (10 renders, keyboard targets, cook/serve/discard locks, result validation)");
             }catch(Exception e){throw new RuntimeException(e);}
         });
     }

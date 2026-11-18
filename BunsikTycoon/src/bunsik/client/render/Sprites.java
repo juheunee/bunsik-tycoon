@@ -8,6 +8,16 @@ import java.awt.geom.*;
 /** docs/screenshots 참고. 외부 이미지 없이 직접 그리는 임시 그래픽. */
 public final class Sprites {
     private Sprites() { }
+    private static final java.util.Map<String, java.util.Optional<java.awt.image.BufferedImage>> images = new java.util.HashMap<>();
+    /** 준비된 클래스패스 리소스만 읽는다. 없거나 손상됐으면 도형 렌더링을 유지한다. */
+    public static synchronized java.util.Optional<java.awt.image.BufferedImage> image(String path) {
+        return images.computeIfAbsent(path, key -> {
+            var resource = Sprites.class.getResource(key);
+            if (resource == null) return java.util.Optional.empty();
+            try { return java.util.Optional.ofNullable(javax.imageio.ImageIO.read(resource)); }
+            catch (java.io.IOException e) { return java.util.Optional.empty(); }
+        });
+    }
     public static final Color RED=new Color(217,54,37), INK=new Color(65,39,24), YELLOW=new Color(255,208,62);
     public static void quality(Graphics2D g) {
         g.setRenderingHint(RenderingHints.KEY_ANTIALIASING,RenderingHints.VALUE_ANTIALIAS_ON);
