@@ -14,13 +14,18 @@ import java.nio.charset.StandardCharsets;
 /** 클라이언트 한 명 전담 수신 스레드 */
 public final class ClientHandler implements Runnable {
 
+    private static final int NICKNAME_MAX = 10;
+
     private final GameServer server;
     private final Socket socket;
     private final int id;
     private final BufferedReader in;
     private final BufferedWriter out;
     private volatile String nickname;
+    private volatile GameRoom room;
+    private volatile int slot = -1;
     private volatile boolean closed;
+    private boolean greeted;
 
     ClientHandler(GameServer server, Socket socket, int id) throws IOException {
         this.server = server;
@@ -55,15 +60,39 @@ public final class ClientHandler implements Runnable {
     private boolean handle(Message m) {
         switch (m.type()) {
             case HELLO -> {
-                nickname = m.get(0);
-                server.onHello(this);
+                if (room != null) {
+                    server.log("게임 중 HELLO 무시: " + nickname);
+                    return true;
+                }
+                String name = sanitize(m.get(0));
+                boolean versus = m.size() > 1 && "VERSUS".equals(m.get(1));
+                nickname = name;
+                boolean first = !greeted;
+                greeted = true;
+                server.onHello(this, versus, first);
             }
             case LEAVE -> {
                 return false;
             }
-            default -> server.log("수신(" + nickname + "): " + m.encode());
+            default -> {
+                GameRoom r = room;
+                if (r != null) {
+                    r.enqueue(slot, m);
+                } else {
+                    server.log("수신(" + nickname + "): " + m.encode());
+                }
+            }
         }
         return true;
+    }
+
+    /** 구분자(| : ,) 제거와 길이 제한 */
+    private String sanitize(String raw) {
+        String s = raw.replaceAll("[|:,]", "").trim();
+        if (s.isEmpty()) {
+            s = "손님" + id;
+        }
+        return s.length() > NICKNAME_MAX ? s.substring(0, NICKNAME_MAX) : s;
     }
 
     public void send(Message m) {
@@ -91,6 +120,22 @@ public final class ClientHandler implements Runnable {
             socket.close();
         } catch (IOException ignored) {
         }
+    }
+
+    void joinRoom(GameRoom room, int slot) {
+        this.room = room;
+        this.slot = slot;
+    }
+
+    void leaveRoom(GameRoom room) {
+        if (this.room == room) {
+            this.room = null;
+            this.slot = -1;
+        }
+    }
+
+    public GameRoom room() {
+        return room;
     }
 
     public int id() {
