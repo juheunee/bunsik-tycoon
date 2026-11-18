@@ -3,10 +3,11 @@ package bunsik.client.render;
 import bunsik.common.*;
 import bunsik.common.Menu;
 import java.awt.*;
+import java.util.function.Consumer;
 
 public final class StoreRenderer {
     private StoreRenderer() { }
-    public static void paint(Graphics2D g,StoreSnapshot state,int x,int y,boolean left) {
+    public static void paint(Graphics2D g,StoreSnapshot state,int x,int y,boolean left, Consumer<Graphics2D> kitchen, String action) {
         Sprites.quality(g);
         g.setColor(new Color(56,37,25));g.fillRect(0,0,640,480);
         for(int ty=0;ty<480;ty+=36)for(int tx=0;tx<640;tx+=36){g.setColor((ty/36+tx/36)%2==0?new Color(255,246,222):new Color(244,221,176));g.fillRect(tx,ty,36,36);g.setColor(new Color(209,186,149));g.drawRect(tx,ty,36,36);}
@@ -16,13 +17,17 @@ public final class StoreRenderer {
         Sprites.center(g,"줄 서는 곳",57,121,10,new Color(125,90,54));
         for(var p:StoreLayout.QUEUE)Sprites.rounded(g,p.x()-16,p.y()+25,32,8,7,new Color(255,207,70),new Color(204,160,49));
         Sprites.rounded(g,22,438,70,25,4,new Color(177,40,21),null);Sprites.center(g,"어서오세요",57,455,10,Color.WHITE);
-        Sprites.kitchen(g);
+        if (kitchen==null) Sprites.kitchen(g);
+        else kitchen.accept(g);
         for(int i=0;i<state.tables().size();i++){var p=StoreLayout.TABLES.get(i);Sprites.table(g,p.x(),p.y(),i+1,state.tables().get(i));}
         for(int i=0;i<state.queue().size();i++){var p=StoreLayout.QUEUE.get(i);var c=state.queue().get(i);Sprites.customer(g,p.x(),p.y(),c.patience(),c.appearance());}
         Sprites.chef(g,x,y,left,state.holding());
-        if(Math.abs(x-StoreLayout.KITCHEN.x())<85&&Math.abs(y-StoreLayout.KITCHEN.y())<150) {
-            Sprites.rounded(g,x-45,y-81,90,19,14,new Color(74,51,27),null);Sprites.center(g,"SPACE 부엌 열기",x,y-67,10,Sprites.YELLOW);
-        } else for(var p:StoreLayout.TABLES)if(Math.hypot(x-p.x(),y-p.y())<70){Sprites.rounded(g,x-45,y-81,90,19,14,new Color(74,51,27),null);Sprites.center(g,"SPACE 상호작용",x,y-67,10,Sprites.YELLOW);break;}
+        if (!action.isEmpty()) {
+            int hintX=Math.max(65,Math.min(StoreLayout.WIDTH-65,x));
+            int hintY=y-81<85?y+21:y-81;
+            Sprites.rounded(g,hintX-65,hintY,130,19,14,new Color(74,51,27),null);
+            Sprites.center(g,action,hintX,hintY+14,10,Sprites.YELLOW);
+        }
         Sprites.background(g,640,85);
         Sprites.rounded(g,8,7,89,32,4,Sprites.RED,new Color(161,39,26));Sprites.center(g,"분식왕",53,30,20,Sprites.YELLOW);
         Graphics2D awning=(Graphics2D)g.create();awning.translate(0,40);awning.clipRect(0,0,104,29);awning.scale(.33,.43);Sprites.awning(awning,320,60);awning.dispose();

@@ -121,6 +121,22 @@ public final class Sprites {
         g.setColor(new Color(244,231,210));g.setStroke(new BasicStroke(1));
         for(int y=0;y<height;y+=28){g.drawLine(0,y,width,y);for(int x=(y/28%2)*28;x<width;x+=56)g.drawLine(x,y,x,y+28);}
     }
+    public static void stationKitchen(Graphics2D g) {
+        rounded(g,492,91,141,380,8,new Color(202,215,220),new Color(110,135,144));
+    }
+
+    public static void cookStation(Graphics2D g, Menu menu, int x, int y, String status, boolean cooking) {
+        rounded(g,x-43,y-17,98,34,6,cooking?new Color(234,144,50):new Color(255,246,222),
+                new Color(113,132,140));
+        plate(g,menu,x-25,y,22);
+        center(g,status,x+15,y+4,11,INK);
+    }
+
+    public static void discardStation(Graphics2D g, int x, int y) {
+        rounded(g,x-23,y-12,46,24,6,new Color(83,101,110),null);
+        center(g,"폐기",x,y+4,11,Color.WHITE);
+    }
+
     public static void kitchen(Graphics2D g) {
         rounded(g,491,92,143,380,5,new Color(186,198,203),new Color(122,140,148));
         for(int y=96;y<470;y+=24){g.setColor(new Color(153,169,175));g.drawLine(493,y,632,y);}

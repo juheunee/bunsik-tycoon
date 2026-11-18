@@ -18,7 +18,7 @@ public final class ResultPanel extends JPanel {
     public void showResult(Message message){
         if(message.type()!=MessageType.GAME_OVER)throw new IllegalArgumentException("Expected GAME_OVER");
         int count=message.getInt(1),win=message.getInt(0);
-        if(count<1||count>2||message.size()!=count+2||win < -2||win>=count)throw new IllegalArgumentException("Invalid result");
+        if(count<1||count>2||message.size()!=count+2||(count==1 ? win!=-2 : win < -1||win>=count))throw new IllegalArgumentException("Invalid result");
         var list=new java.util.ArrayList<Score>();
         for(int i=0;i<count;i++){
             String[] fields=message.get(i+2).split(":",-1);if(fields.length!=5)throw new IllegalArgumentException("Invalid score");
@@ -44,6 +44,7 @@ public final class ResultPanel extends JPanel {
             Score score=scores.get(row);String[] cells={score.nickname(),score.satisfaction()<0?"-":score.satisfaction()+"%",""+score.sales(),""+score.gold(),""+score.customers()};
             for(int i=0;i<cells.length;i++)Sprites.center(g,cells[i],xs[i],299+row*64,20,i==1?new Color(181,39,26):UiKit.INK);
         }
-        Sprites.center(g,"승리 기준: 만족도가 높은 쪽 → 같으면 판매 수",600,449,13,new Color(144,103,73));g.dispose();
+        Sprites.center(g,"승리 기준: 만족도가 높은 쪽 → 같으면 판매 수",600,449,13,new Color(144,103,73));
+        g.dispose();
     }
 }

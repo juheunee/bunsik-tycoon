@@ -44,7 +44,25 @@ public final class NetworkClientTest {
                 check(disconnected.await(5,TimeUnit.SECONDS));peer.get(5,TimeUnit.SECONDS);
             }
         }
-        System.out.println("NetworkClientTest: PASS (UTF-8, command order, EDT, EOF)");
+        checkLeave();
+        System.out.println("NetworkClientTest: PASS (UTF-8, command order, EDT, EOF, LEAVE)");
+    }
+    private static void checkLeave() throws Exception {
+        try (ServerSocket server=new ServerSocket(0);
+             NetworkClient client=new NetworkClient(m->{},reason->{})) {
+            client.connect("127.0.0.1",server.getLocalPort(),3000,"주흔","SOLO");
+            server.setSoTimeout(5000);
+            try (Socket socket=server.accept()) {
+                socket.setSoTimeout(5000);
+                var in=new BufferedReader(new InputStreamReader(socket.getInputStream(),StandardCharsets.UTF_8));
+                check("HELLO|주흔|SOLO".equals(in.readLine()));
+                client.leave();
+                client.leave();
+                client.send(new Message(MessageType.INTERACT,230,210));
+                check("LEAVE".equals(in.readLine()));
+                check(in.readLine()==null);
+            }
+        }
     }
     private static Message take(BlockingQueue<Message> queue)throws Exception{
         Message m=queue.poll(5,TimeUnit.SECONDS);if(m==null)throw new AssertionError("timed out");return m;

@@ -30,6 +30,12 @@ public final class TitlePanel extends JPanel {
             callback.accept(new Connection(name,host.getText().trim(),value,mode));
         } catch(IllegalArgumentException e) {status="닉네임 1~20자, 서버 IP와 포트(1~65535)를 확인하세요.";repaint();}
     }
+    public void status(String text) {
+        solo.setEnabled(false);
+        versus.setEnabled(false);
+        status = text;
+        repaint();
+    }
     public void reset(String text) {solo.setEnabled(true);versus.setEnabled(true);status=text;repaint();}
     @Override public void doLayout() {
         UiKit.bounds(this,nickname,490,301,300,39);UiKit.bounds(this,host,490,353,300,39);UiKit.bounds(this,port,490,405,300,39);
