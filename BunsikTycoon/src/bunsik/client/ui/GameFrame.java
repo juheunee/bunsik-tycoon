@@ -132,7 +132,6 @@ public final class GameFrame extends JFrame {
                         if (playerCount == 2) game.opponent(state);
                         return;
                     }
-                    StoreSnapshot previous = game.state();
                     game.setState(state);
                     hasState = true;
                     beginIfReady();
@@ -140,14 +139,11 @@ public final class GameFrame extends JFrame {
                         phase = Phase.ENDING;
                         game.notice("서버의 영업 종료 결과를 기다립니다.");
                         updateInput();
-                    } else if (phase == Phase.PLAYING && previous.cooking() != null
-                            && previous.holding() == null && state.holding() == previous.cooking()) {
-                        game.notice(state.holding().label + " 조리 완료! 손님에게 가져다 주세요.");
                     }
                 }
                 case COOK_DONE -> {
-                    // B3가 바로 뒤에 보내는 STATE의 보유 음식으로 완료를 표시한다.
-                    Menu.valueOf(m.get(0));
+                    Menu menu = Menu.valueOf(m.get(0));
+                    if (phase == Phase.PLAYING) game.notice(menu.label + " 조리 완료! 조리대에서 집어 주세요.");
                 }
                 case TOAST -> {
                     if (phase != Phase.PLAYING) return;
@@ -214,12 +210,15 @@ public final class GameFrame extends JFrame {
         if(screen.equals("카운트다운")){game.setState(StoreSnapshot.empty());game.countdown(3);game.setBlocked(true);}
         if(screen.equals("2P 식당"))game.opponent(new StoreSnapshot(1,128000,180,6,5,79,430,265,false,null,null,0,0,tables,java.util.List.of(new StoreSnapshot.CustomerView(450,3))));
         if(screen.equals("부엌")||screen.equals("조리 중")||screen.equals("요리 완료")){
-            StoreSnapshot next=copy(state,screen.equals("요리 완료")?Menu.TTEOKBOKKI:null,screen.equals("조리 중")?Menu.TTEOKBOKKI:null,screen.equals("조리 중")?1600:0);
-            game.setState(next);
+            var stations = switch (screen) {
+                case "조리 중" -> java.util.Map.of(Menu.TTEOKBOKKI, 1600L, Menu.SUNDAE, 2800L);
+                case "요리 완료" -> java.util.Map.of(Menu.TTEOKBOKKI, 0L, Menu.SUNDAE, 2800L);
+                default -> java.util.Map.<Menu, Long>of();
+            };
+            game.setState(new StoreSnapshot(state.slot(), state.timeLeftMs(), state.gold(), state.servedCustomers(),
+                    state.sales(), state.satisfaction(), state.chefX(), state.chefY(), state.facingLeft(),
+                    java.util.List.of(new StoreSnapshot.Hand(Menu.TTEOKBOKKI, false), StoreSnapshot.Hand.DISH),
+                    stations, state.tables(), state.queue()));
         }
-    }
-    private static StoreSnapshot copy(StoreSnapshot s,Menu holding,Menu cooking,long remaining){
-        return new StoreSnapshot(s.slot(),s.timeLeftMs(),s.gold(),s.servedCustomers(),s.sales(),s.satisfaction(),
-            s.chefX(),s.chefY(),s.facingLeft(),holding,cooking,remaining,cooking==null?0:cooking.cookTimeMs,s.tables(),s.queue());
     }
 }
