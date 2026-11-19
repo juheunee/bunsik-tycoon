@@ -6,23 +6,23 @@ import bunsik.common.Message;
 import bunsik.common.MessageType;
 import bunsik.common.StoreLayout;
 import bunsik.common.StoreSnapshot;
+import bunsik.common.StoreSnapshot.Hand;
 import bunsik.common.TableState;
 
 import java.util.ArrayDeque;
 import java.util.ArrayList;
 import java.util.Deque;
+import java.util.EnumMap;
 import java.util.Iterator;
 import java.util.List;
 
 /** 게임 규칙 (GameRoom 게임 루프 스레드 전용) */
 public final class Store {
 
-    private static final int KITCHEN_REACH_X = 85;
-    private static final int KITCHEN_REACH_Y = 150;
-    private static final int TABLE_REACH = 70;
-
     private final CustomerSchedule schedule;
     private final Chef chef = new Chef();
+    // An absent station is idle. A zero deadline means the food is ready to pick up.
+    private final EnumMap<Menu, Long> cookEndsAt = new EnumMap<>(Menu.class);
     private final Table[] tables = new Table[GameConfig.TABLE_COUNT];
     private final Deque<Customer> queue = new ArrayDeque<>();
     private final List<Message> events = new ArrayList<>();
@@ -134,10 +134,11 @@ public final class Store {
     }
 
     private void finishCooking(long now) {
-        if (chef.cooking != null && now >= chef.cookEndAt) {
-            chef.held = chef.cooking;
-            chef.cooking = null;
-            events.add(new Message(MessageType.COOK_DONE, chef.held.name()));
+        for (var station : cookEndsAt.entrySet()) {
+            if (station.getValue() != 0 && now >= station.getValue()) {
+                station.setValue(0L);
+                events.add(new Message(MessageType.COOK_DONE, station.getKey()));
+            }
         }
     }
 
@@ -169,8 +170,17 @@ public final class Store {
      // 인내심 0 손님 먼저 퇴장 (같은 틱의 update보다 행동이 먼저 처리되므로)
         dropImpatientCustomers(now);
         
-        if (nearKitchen(chef.x, chef.y)) {
-            interactKitchen();
+        if (StoreLayout.nearKitchenTarget(StoreLayout.DISH_BIN, chef.x, chef.y)) {
+            unloadDishes();
+            return;
+        }
+        if (StoreLayout.nearKitchenTarget(StoreLayout.DISCARD, chef.x, chef.y)) {
+            discardFood();
+            return;
+        }
+        var station = StoreLayout.nearestStation(chef.x, chef.y);
+        if (station != null) {
+            pickUpFood(station.menu());
             return;
         }
         int index = nearestTable(chef.x, chef.y);
@@ -187,33 +197,60 @@ public final class Store {
             case WAITING_FOOD -> serve(t, no, now);
             case EATING -> toast("맛있게 먹는 중이에요");
             case DIRTY -> {
+                int hand = chef.freeHand();
+                if (hand < 0) {
+                    toast("그릇을 들려면 한 손을 비워 주세요.");
+                    return;
+                }
+                chef.hands[hand] = Hand.DISH;
                 gold += t.gold;
-                toast("청소 완료! +" + t.gold + " 골드");
+                toast("그릇을 들었어요! +" + t.gold + " 골드");
                 t.clear();
+                seatCustomers();
             }
             case EMPTY -> {
             }
         }
     }
 
-    private void interactKitchen() {
-        if (chef.cooking != null) {
-            events.add(new Message(MessageType.OPEN_KITCHEN));
-        } else if (chef.held != null) {
-            toast("들고 있던 음식(" + chef.held.label + ")을 버렸어요");
-            chef.held = null;
-        } else {
-            events.add(new Message(MessageType.OPEN_KITCHEN));
+    private void pickUpFood(Menu menu) {
+        if (cookEndsAt.getOrDefault(menu, -1L) != 0) return;
+        int hand = chef.freeHand();
+        if (hand < 0) {
+            toast("음식을 들려면 한 손을 비워 주세요.");
+            return;
+        }
+        chef.hands[hand] = new Hand(menu, false);
+        cookEndsAt.remove(menu);
+        toast(menu.label + "을(를) 집었어요.");
+    }
+
+    private void unloadDishes() {
+        int count = 0;
+        for (int i = 0; i < chef.hands.length; i++) {
+            if (chef.hands[i].dish()) {
+                chef.hands[i] = Hand.EMPTY;
+                count++;
+            }
+        }
+        if (count > 0) toast("설거지통에 그릇 " + count + "개를 넣었어요.");
+    }
+
+    private void discardFood() {
+        for (int i = 0; i < chef.hands.length; i++) {
+            Menu menu = chef.hands[i].menu();
+            if (menu != null) {
+                chef.hands[i] = Hand.EMPTY;
+                toast(menu.label + "을(를) 버렸어요.");
+                return;
+            }
         }
     }
 
     private void serve(Table t, int no, long now) {
         Menu ordered = t.customer.menu;
-        if (chef.held == null) {
-            toast(no + "번 손님 주문: " + ordered.label + " (부엌에서 만들어 주세요)");
-            return;
-        }
-        if (chef.held != ordered) {
+        int hand = chef.handHolding(ordered);
+        if (hand < 0) {
             toast("주문 메뉴가 달라요 (주문: " + ordered.label + ")");
             return;
         }
@@ -222,7 +259,7 @@ public final class Store {
         c.served = true;
         c.eatEndAt = now + GameConfig.EAT_MS;
         t.state = TableState.EATING;
-        chef.held = null;
+        chef.hands[hand] = Hand.EMPTY;
         served++;
         satisfactionSum += c.patienceAtServe * 100.0;
         satisfactionCount++;
@@ -233,15 +270,13 @@ public final class Store {
         if (!running(now) || menu == null) {
             return;
         }
-        if (!nearKitchen(chef.x, chef.y)) {
-            toast("부엌 가까이에서만 요리할 수 있어요");
-        } else if (chef.cooking != null) {
-            toast("이미 요리 중이에요");
-        } else if (chef.held != null) {
-            toast("이미 음식을 들고 있어요");
+        var station = StoreLayout.nearestStation(chef.x, chef.y);
+        if (station == null || station.menu() != menu) {
+            toast("해당 메뉴의 조리대 앞에서만 요리할 수 있어요.");
+        } else if (cookEndsAt.containsKey(menu)) {
+            toast("조리대에 음식이 있어요.");
         } else {
-            chef.cooking = menu;
-            chef.cookEndAt = now + menu.cookTimeMs;
+            cookEndsAt.put(menu, now + menu.cookTimeMs);
         }
     }
 
@@ -288,14 +323,6 @@ public final class Store {
         return c == null ? null : c.menu;
     }
 
-    public Menu heldMenu() {
-        return chef.held;
-    }
-
-    public Menu cookingMenu() {
-        return chef.cooking;
-    }
-
     /** 테이블 손님의 남은 인내심 0~1000 (손님 없으면 -1) */
     public int tablePatience(int index, long now) {
         Customer c = tables[index].customer;
@@ -318,16 +345,10 @@ public final class Store {
         return chef.y;
     }
 
-    /** 부엌 상호작용 범위 (StoreRenderer 안내 표시와 같은 범위) */
-    private static boolean nearKitchen(int x, int y) {
-        return Math.abs(x - StoreLayout.KITCHEN.x()) < KITCHEN_REACH_X
-                && Math.abs(y - StoreLayout.KITCHEN.y()) < KITCHEN_REACH_Y;
-    }
-
     /** 범위 안 가장 가까운 테이블 번호 (없으면 -1) */
     private static int nearestTable(int x, int y) {
         int best = -1;
-        double bestDist = TABLE_REACH;
+        double bestDist = StoreLayout.TABLE_REACH;
         for (int i = 0; i < StoreLayout.TABLES.size(); i++) {
             StoreLayout.Position p = StoreLayout.TABLES.get(i);
             double d = Math.hypot(x - p.x(), y - p.y());
@@ -341,12 +362,9 @@ public final class Store {
 
     public StoreSnapshot snapshot(int slot, long now) {
         long timeLeftMs = startAt < 0 ? GameConfig.GAME_DURATION_MS : Math.max(0, endAt - now);
-        long cookRemainMs = 0;
-        long cookTotalMs = 0;
-        if (chef.cooking != null) {
-            cookTotalMs = chef.cooking.cookTimeMs;
-            cookRemainMs = Math.min(cookTotalMs, Math.max(0, chef.cookEndAt - now));
-        }
+        var stations = new EnumMap<Menu, Long>(Menu.class);
+        cookEndsAt.forEach((menu, endsAt) -> stations.put(menu, endsAt == 0 ? 0
+                : Math.clamp(endsAt - now, 1L, (long) menu.cookTimeMs)));
 
         List<StoreSnapshot.TableView> tableViews = new ArrayList<>();
         for (Table t : tables) {
@@ -373,7 +391,7 @@ public final class Store {
 
         // STATE 순서: 다녀간 손님(visited) → 판매 수(served)
         return new StoreSnapshot(slot, timeLeftMs, gold, visited, served, satisfaction(),
-                chef.x, chef.y, chef.facingLeft, chef.held, chef.cooking, cookRemainMs, cookTotalMs,
+                chef.x, chef.y, chef.facingLeft, List.of(chef.hands), stations,
                 tableViews, queueViews);
     }
 }

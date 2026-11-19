@@ -21,7 +21,11 @@ public final class GamePanel extends JPanel {
     private String notice="서버 시작 대기 중",nickname="사장님",otherName="상대";
     private int countdown=-1;
     private final JButton exit;
-    private record Interaction(Menu menu, int table, String hint, boolean available) { }
+    private record Interaction(Menu station, int table, String hint, boolean available, boolean cook) {
+        Interaction(int table, String hint, boolean available) {
+            this(null, table, hint, available, false);
+        }
+    }
     private Interaction pending;
 
     private void interact() {
@@ -30,10 +34,10 @@ public final class GamePanel extends JPanel {
         if (target==null || !target.available()) return;
         pending=target;
         noticeBeforeState=false;
-        if (target.menu()!=null) {
+        if (target.cook()) {
             // COOK carries only the menu. Queue the current position on the same writer first.
             sender.accept(new Message(MessageType.MOVE,(int)x,(int)y,left));
-            sender.accept(new Message(MessageType.COOK,target.menu()));
+            sender.accept(new Message(MessageType.COOK,target.station()));
         } else {
             sender.accept(new Message(MessageType.INTERACT,(int)x,(int)y));
         }
@@ -41,17 +45,22 @@ public final class GamePanel extends JPanel {
 
     private Interaction target() {
         int currentX=(int)x, currentY=(int)y;
-        if (KitchenOverlay.nearDiscard(currentX,currentY)) {
-            return new Interaction(null,-1,state.holding()==null?"폐기할 음식 없음":"SPACE 음식 버리기",
-                    state.holding()!=null);
+        if (StoreLayout.nearKitchenTarget(StoreLayout.DISH_BIN, currentX, currentY)) {
+            boolean hasDish = state.hands().stream().anyMatch(StoreSnapshot.Hand::dish);
+            return new Interaction(-1, hasDish ? "SPACE 그릇 내려놓기" : "내려놓을 그릇 없음", hasDish);
         }
-        var station=KitchenOverlay.nearestStation(currentX,currentY);
+        boolean hasFood = state.hands().stream().anyMatch(hand -> hand.menu() != null);
+        if (StoreLayout.nearKitchenTarget(StoreLayout.DISCARD, currentX, currentY)) {
+            return new Interaction(-1, hasFood ? "SPACE 음식 버리기" : "폐기할 음식 없음", hasFood);
+        }
+        var station=StoreLayout.nearestStation(currentX,currentY);
         if (station!=null) {
             Menu menu=station.menu();
-            boolean available=state.cooking()==null && state.holding()==null;
-            String hint=available?"SPACE "+menu.label+" 조리"
-                    :state.cooking()!=null?state.cooking().label+" 조리 중":"보유 음식 먼저 처리";
-            return new Interaction(menu,-1,hint,available);
+            Long remaining = state.stations().get(menu);
+            if (remaining == null) return new Interaction(menu, -1, "SPACE " + menu.label + " 조리", true, true);
+            if (remaining > 0) return new Interaction(menu, -1, menu.label + " 조리 중", false, false);
+            boolean freeHand = state.hasFreeHand();
+            return new Interaction(menu, -1, freeHand ? "SPACE 음식 집기" : "한 손을 비워 주세요", freeHand, false);
         }
         int nearest=-1;
         double best=StoreLayout.TABLE_REACH;
@@ -65,13 +74,16 @@ public final class GamePanel extends JPanel {
         if (nearest<0) return null;
         var table=state.tables().get(nearest);
         return switch (table.state()) {
-            case WAITING_ORDER -> new Interaction(null,nearest,"SPACE 주문 받기",true);
-            case WAITING_FOOD -> new Interaction(null,nearest,
-                    state.holding()==null?"음식 준비 필요"
-                            :state.holding()==table.menu()?"SPACE 서빙하기":"주문 메뉴가 달라요",
-                    state.holding()!=null);
-            case DIRTY -> new Interaction(null,nearest,"SPACE 치우기",true);
-            case EATING -> new Interaction(null,nearest,"식사 중",false);
+            case WAITING_ORDER -> new Interaction(nearest,"SPACE 주문 받기",true);
+            case WAITING_FOOD -> {
+                boolean matchingFood = table.menu() != null
+                        && state.hands().stream().anyMatch(hand -> hand.menu() == table.menu());
+                yield new Interaction(nearest, matchingFood ? "SPACE 서빙하기"
+                        : hasFood ? "주문 메뉴가 달라요" : "음식 준비 필요", hasFood);
+            }
+            case DIRTY -> new Interaction(nearest,
+                    state.hasFreeHand() ? "SPACE 그릇 집기" : "한 손을 비워 주세요", state.hasFreeHand());
+            case EATING -> new Interaction(nearest,"식사 중",false);
             case EMPTY -> null;
         };
     }
@@ -109,8 +121,10 @@ public final class GamePanel extends JPanel {
     }
     private boolean has(String a,String b){return pressed.contains(a)||pressed.contains(b);}
     public void setState(StoreSnapshot next) {
-        if (pending!=null && (noticeBeforeState || next.holding()!=state.holding()
-                || next.cooking()!=state.cooking() || tableChanged(next))) clearPending();
+        if (pending != null && (noticeBeforeState || !next.hands().equals(state.hands())
+                || (pending.station() != null && !state.stations().containsKey(pending.station())
+                        && next.stations().containsKey(pending.station()))
+                || tableChanged(next))) clearPending();
         state=next;
         if (pressed.isEmpty() || blocked) {
             x=next.chefX();
@@ -151,23 +165,22 @@ public final class GamePanel extends JPanel {
         long seconds=(state.timeLeftMs()+999)/1000;Sprites.center(g,String.format("%d:%02d",seconds/60,seconds%60),1122,45,24,Sprites.YELLOW);
         g.setColor(new Color(63,38,22));g.fillRect(0,60,1200,32);
         Sprites.text(g,"내 식당 · "+nickname,14,82,14,Sprites.YELLOW);
-        if (state.holding()!=null) {
-            Sprites.text(g,"보유 음식 · "+state.holding().label,260,82,14,UiKit.CREAM);
-        }
+        Sprites.text(g, "왼손 · " + state.hands().get(0).label()
+                + "   오른손 · " + state.hands().get(1).label(), 260, 82, 14, UiKit.CREAM);
         Interaction target=blocked?null:target();
         String hint=pending!=null?"서버 응답 대기":target==null?"":target.hint();
         if(opponent!=null&&!hideOpponent) {
             Sprites.text(g,"상대 식당 · "+otherName+"   만족도 "+opponent.satisfaction()+"% · 판매 "+opponent.sales()+" · 골드 "+opponent.gold(),615,82,13,UiKit.CREAM);
-            drawStore(g,state,10,194,580,376,(int)x,(int)y,left,true,hint);
-            drawStore(g,opponent,610,194,580,376,opponent.chefX(),opponent.chefY(),opponent.facingLeft(),false,"");
+            drawStore(g,state,10,194,580,376,(int)x,(int)y,left,hint);
+            drawStore(g,opponent,610,194,580,376,opponent.chefX(),opponent.chefY(),opponent.facingLeft(),"");
             g.setColor(new Color(19,12,8));g.fillRect(598,92,4,578);
-        } else drawStore(g,state,165,98,870,566,(int)x,(int)y,left,true,hint);
-        Sprites.center(g,"방향키/WASD 이동   SPACE 조리 · 주문 · 서빙 · 치우기 · 폐기   ESC 나가기"+(opponent==null?"":"   H 상대 식당 숨기기"),600,690,12,UiKit.CREAM);
+        } else drawStore(g,state,165,98,870,566,(int)x,(int)y,left,hint);
+        Sprites.center(g,"방향키/WASD 이동   SPACE 조리 · 픽업 · 주문 · 서빙 · 청소   ESC 나가기"+(opponent==null?"":"   H 상대 식당 숨기기"),600,690,12,UiKit.CREAM);
         if(!notice.isEmpty()){Sprites.rounded(g,360,98,480,26,20,new Color(54,34,18,230),null);Sprites.center(g,notice,600,116,12,Sprites.YELLOW);}
         if(countdown>0){g.setColor(new Color(0,0,0,145));g.fillRect(0,92,1200,578);Sprites.center(g,""+countdown,600,422,135,Sprites.RED);Sprites.center(g,""+countdown,600,416,125,Sprites.YELLOW);Sprites.center(g,"손님이 곧 들어와요! 방향키로 움직이고 스페이스로 일해요",600,478,20,Color.WHITE);}
         g.dispose();
     }
-    private static void drawStore(Graphics2D g,StoreSnapshot state,int bx,int by,int w,int h,int x,int y,boolean left,boolean own,String hint){
-        Graphics2D room=(Graphics2D)g.create();room.translate(bx,by);room.scale(w/640.0,h/480.0);room.clipRect(0,0,640,480);StoreRenderer.paint(room,state,x,y,left,own?g2->KitchenOverlay.paint(g2,state):null,hint);room.dispose();
+    private static void drawStore(Graphics2D g,StoreSnapshot state,int bx,int by,int w,int h,int x,int y,boolean left,String hint){
+        Graphics2D room=(Graphics2D)g.create();room.translate(bx,by);room.scale(w/640.0,h/480.0);room.clipRect(0,0,640,480);StoreRenderer.paint(room,state,x,y,left,g2->KitchenOverlay.paint(g2,state),hint);room.dispose();
     }
 }

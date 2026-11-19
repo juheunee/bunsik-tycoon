@@ -21,7 +21,7 @@ public final class StoreRenderer {
         else kitchen.accept(g);
         for(int i=0;i<state.tables().size();i++){var p=StoreLayout.TABLES.get(i);Sprites.table(g,p.x(),p.y(),i+1,state.tables().get(i));}
         for(int i=0;i<state.queue().size();i++){var p=StoreLayout.QUEUE.get(i);var c=state.queue().get(i);Sprites.customer(g,p.x(),p.y(),c.patience(),c.appearance());}
-        Sprites.chef(g,x,y,left,state.holding());
+        Sprites.chef(g, x, y, left, state.hands().get(0), state.hands().get(1));
         if (!action.isEmpty()) {
             int hintX=Math.max(65,Math.min(StoreLayout.WIDTH-65,x));
             int hintY=y-81<85?y+21:y-81;

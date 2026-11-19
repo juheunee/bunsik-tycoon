@@ -60,32 +60,39 @@ public final class ScreenTest {
                 game.setState(at(state,second.position(),null,station.menu()));
                 render(game,"cooking");
                 space(game);
-                check(actions.size()==4,"B3 single cook blocks the other station");
-                game.setState(at(state,second.position(),station.menu(),null));
+                check(actions.size()==6 && actions.getLast().encode().equals("COOK|"+second.menu()),
+                        "first station does not block the second");
+                var ready = new StoreSnapshot(0, state.timeLeftMs(), 0, 0, 0, -1,
+                        second.position().x(), second.position().y(), false,
+                        List.of(new StoreSnapshot.Hand(station.menu(), false), StoreSnapshot.Hand.EMPTY),
+                        Map.of(second.menu(), 0L), state.tables(), state.queue());
+                game.setState(ready);
                 render(game,"done");
                 space(game);
-                check(actions.size()==4,"B3-held food blocks cook and station cannot discard");
+                check(actions.size()==7 && actions.getLast().type()==MessageType.INTERACT,
+                        "ready food is picked up with INTERACT into the second hand");
 
+                game.serverNotice("픽업 처리");
                 game.setState(at(state,StoreLayout.DISCARD,station.menu(),null));
                 space(game);
                 space(game);
-                check(actions.size()==5 && actions.getLast().type()==MessageType.INTERACT,"one discard");
+                check(actions.size()==8 && actions.getLast().type()==MessageType.INTERACT,"one discard");
                 game.setState(at(state,StoreLayout.DISCARD,null,null));
                 space(game);
-                check(actions.size()==5,"cannot discard with empty hands");
+                check(actions.size()==8,"cannot discard with empty hands");
                 game.setState(at(state,second.position(),null,null));
                 space(game);
-                check(actions.size()==7 && actions.getLast().encode().equals("COOK|"+second.menu()),"next station after discard");
+                check(actions.size()==10 && actions.getLast().encode().equals("COOK|"+second.menu()),"next station after discard");
                 game.setState(at(state,StoreLayout.TABLES.getFirst(),second.menu(),null));
                 space(game);
                 space(game);
-                check(actions.size()==8 && actions.getLast().type()==MessageType.INTERACT,"serve mismatch goes to server once");
+                check(actions.size()==11 && actions.getLast().type()==MessageType.INTERACT,"serve mismatch goes to server once");
                 game.serverNotice("주문 메뉴가 달라요");
                 game.setState(at(state,StoreLayout.TABLES.getFirst(),second.menu(),null));
-                check(game.state().holding()==second.menu(),"rejection preserves held food");
+                check(game.state().hands().getFirst().menu()==second.menu(),"rejection preserves held food");
                 game.setBlocked(true);
                 space(game);
-                check(actions.size()==8,"ending blocks interactions");
+                check(actions.size()==11,"ending blocks interactions");
                 game.countdown(3);render(game,"countdown");game.countdown(0);game.opponent(state);render(game,"versus");
                 var result=new ResultPanel(()->{},()->{});result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"));render(result,"result");
                 try {result.showResult(new Message(MessageType.GAME_OVER,2,1,"주흔:84:21:742:25"));throw new AssertionError("invalid winner");}catch(IllegalArgumentException expected){}

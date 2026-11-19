@@ -10,7 +10,6 @@ public final class StoreLayout {
     public static final int WIDTH = 640, HEIGHT = 480;
     public static final int PLAYER_RADIUS = 14;
     public static final Position KITCHEN = new Position(550, 230);
-    // Keyboard targets within the existing B3 kitchen. Server station geometry is pending agreement.
     public static final List<CookStation> COOK_STATIONS = List.of(
             new CookStation(Menu.TTEOKBOKKI, new Position(550, 140)),
             new CookStation(Menu.GIMBAP, new Position(550, 183)),
@@ -18,6 +17,7 @@ public final class StoreLayout {
             new CookStation(Menu.TWIGIM, new Position(550, 269)),
             new CookStation(Menu.EOMUK, new Position(550, 312)));
     public static final Position DISCARD = new Position(600, 350);
+    public static final Position DISH_BIN = new Position(600, 405);
     public static final int KITCHEN_TARGET_REACH = 24;
     public static final int TABLE_REACH = 70;
     public static final Position SPAWN = new Position(430, 265);
@@ -29,5 +29,22 @@ public final class StoreLayout {
     public static int clampY(int y) { return Math.max(120, Math.min(HEIGHT - PLAYER_RADIUS, y)); }
     public static double distance(Position position, int x, int y) {
         return Math.hypot(x - position.x(), y - position.y());
+    }
+
+    public static CookStation nearestStation(int x, int y) {
+        CookStation nearest = null;
+        double best = KITCHEN_TARGET_REACH;
+        for (CookStation station : COOK_STATIONS) {
+            double distance = distance(station.position(), x, y);
+            if (distance < best) {
+                nearest = station;
+                best = distance;
+            }
+        }
+        return nearest;
+    }
+
+    public static boolean nearKitchenTarget(Position target, int x, int y) {
+        return distance(target, x, y) < KITCHEN_TARGET_REACH;
     }
 }

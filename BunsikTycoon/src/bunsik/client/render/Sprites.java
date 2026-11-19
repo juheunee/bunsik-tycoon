@@ -70,6 +70,11 @@ public final class Sprites {
         g.dispose();
     }
     public static void chef(Graphics2D source,int x,int y,boolean left,Menu holding) {
+        chef(source, x, y, left, new StoreSnapshot.Hand(holding, false), StoreSnapshot.Hand.EMPTY);
+    }
+
+    public static void chef(Graphics2D source, int x, int y, boolean left,
+            StoreSnapshot.Hand leftHand, StoreSnapshot.Hand rightHand) {
         Graphics2D g=(Graphics2D)source.create();g.translate(x,y);g.scale(.78,.78);
         g.setColor(new Color(0,0,0,45));g.fillOval(-23,22,46,10);
         g.setColor(new Color(55,42,35));g.fillRoundRect(-15,9,10,18,5,5);g.fillRoundRect(6,9,10,18,5,5);
@@ -80,7 +85,9 @@ public final class Sprites {
         g.setColor(RED);g.fillArc(-25,-77,50,44,0,180);g.fillOval(left?18:-32,-61,13,10);
         g.setColor(Color.WHITE);for(int i=0;i<5;i++)g.fillOval(-17+i*8,-65-(i%2)*7,4,4);
         g.setColor(INK);g.fillOval(-11,-49,5,6);g.fillOval(7,-49,5,6);g.drawArc(-8,-45,17,14,180,180);
-        if(holding!=null)plate(g,holding,0,-12,43);g.dispose();
+        if (!leftHand.empty()) plate(g, leftHand.menu(), -25, -7, 26);
+        if (!rightHand.empty()) plate(g, rightHand.menu(), 25, -7, 26);
+        g.dispose();
     }
     public static void customer(Graphics2D g,int x,int y,int patience,int appearance) {
         g.setColor(new Color(0,0,0,40));g.fillOval(x-16,y+19,32,7);
@@ -135,16 +142,25 @@ public final class Sprites {
         rounded(g,492,91,141,380,8,new Color(202,215,220),new Color(110,135,144));
     }
 
-    public static void cookStation(Graphics2D g, Menu menu, int x, int y, String status, boolean cooking) {
-        rounded(g,x-43,y-17,98,34,6,cooking?new Color(234,144,50):new Color(255,246,222),
+    public static void cookStation(Graphics2D g, Menu menu, int x, int y, Long remainingMs) {
+        Color color = new Color(255,246,222);
+        String status = menu.label;
+        if (remainingMs != null && remainingMs == 0) {
+            color = new Color(176,221,146);
+            status += " 완료";
+        } else if (remainingMs != null) {
+            color = new Color(234,144,50);
+            status = "%s %.1f초".formatted(menu.label, remainingMs / 1000.0);
+        }
+        rounded(g,x-43,y-17,98,34,6,color,
                 new Color(113,132,140));
         plate(g,menu,x-25,y,22);
         center(g,status,x+15,y+4,11,INK);
     }
 
-    public static void discardStation(Graphics2D g, int x, int y) {
+    public static void kitchenBin(Graphics2D g, int x, int y, String label) {
         rounded(g,x-23,y-12,46,24,6,new Color(83,101,110),null);
-        center(g,"폐기",x,y+4,11,Color.WHITE);
+        center(g,label,x,y+4,11,Color.WHITE);
     }
 
     public static void kitchen(Graphics2D g) {
