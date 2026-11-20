@@ -15,6 +15,7 @@ public final class GameServer {
     private final ServerFrame frame;
     private final int port;
     private final List<ClientHandler> clients = new CopyOnWriteArrayList<>();
+    private final VersusLobby lobby = new VersusLobby(this);
     private final AtomicInteger nextId = new AtomicInteger();
     private ServerSocket serverSocket;
 
@@ -58,8 +59,7 @@ public final class GameServer {
             log("입장: #" + h.id() + " " + h.nickname());
         }
         if (versus) {
-            h.send(MessageType.REJECT, "경쟁 모드는 아직 준비 중이에요.");
-            h.close();
+            lobby.join(h);
             return;
         }
         log("혼자 하기: " + h.nickname());
@@ -68,6 +68,7 @@ public final class GameServer {
 
     void onDisconnect(ClientHandler h) {
         clients.remove(h);
+        lobby.leave(h);
         GameRoom r = h.room();
         if (r != null) {
             r.onPlayerLeft(h);
@@ -86,6 +87,10 @@ public final class GameServer {
         for (ClientHandler h : clients) {
             h.close();
         }
+    }
+
+    VersusLobby lobby() {
+        return lobby;
     }
 
     void log(String text) {

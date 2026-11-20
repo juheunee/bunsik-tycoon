@@ -11,7 +11,7 @@ import java.io.OutputStreamWriter;
 import java.net.Socket;
 import java.nio.charset.StandardCharsets;
 
-/** 클라이언트 한 명 전담 수신 스레드 */
+/** 클라이언트 한 명의 수신 스레드 */
 public final class ClientHandler implements Runnable {
 
     private static final int NICKNAME_MAX = 10;
@@ -71,6 +71,7 @@ public final class ClientHandler implements Runnable {
                 greeted = true;
                 server.onHello(this, versus, first);
             }
+            case READY -> server.lobby().setReady(this, m.getBool(0));
             case LEAVE -> {
                 return false;
             }
