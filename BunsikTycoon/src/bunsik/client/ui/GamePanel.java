@@ -27,8 +27,15 @@ public final class GamePanel extends JPanel {
         }
     }
     private Interaction pending;
+    private boolean choosingDiscard;
 
     private void interact() {
+        // 버릴 손 선택 중 SPACE: 취소
+        if (choosingDiscard) {
+            choosingDiscard=false;
+            repaint();
+            return;
+        }
         if (blocked || pending!=null) return;
         Interaction target=target();
         if (target==null || !target.available()) return;
@@ -40,7 +47,24 @@ public final class GamePanel extends JPanel {
             sender.accept(new Message(MessageType.COOK,target.station()));
         } else {
             sender.accept(new Message(MessageType.INTERACT,(int)x,(int)y));
+         // 양손 모두 음식이면 서버 안내(TOAST)와 함께 버릴 손 선택 시작
+            if (StoreLayout.nearKitchenTarget(StoreLayout.DISCARD,(int)x,(int)y)
+                    && state.hands().stream().allMatch(hand->hand.menu()!=null)) {
+                choosingDiscard=true;
+                pressed.clear();
+            }
         }
+    }
+    
+    // 방향키 왼쪽/A: 왼손, 오른쪽/D: 오른손
+    private void chooseDiscard(String key) {
+        int hand=key.equals("LEFT")||key.equals("A")?0:key.equals("RIGHT")||key.equals("D")?1:-1;
+        if (hand<0) return;
+        choosingDiscard=false;
+        pending=new Interaction(-1,"",true);
+        noticeBeforeState=false;
+        sender.accept(new Message(MessageType.DISCARD,hand));
+        repaint();
     }
 
     private Interaction target() {
@@ -93,7 +117,7 @@ public final class GamePanel extends JPanel {
         exit=UiKit.button("나가기",new Color(103,69,47),onExit);add(exit);exit.setFocusable(false);
         bind("ESCAPE",false,onExit);
         for(String key:new String[]{"UP","DOWN","LEFT","RIGHT","W","A","S","D"}) {
-            bind(key,false,()->{if(!blocked)pressed.add(key);});bind(key,true,()->pressed.remove(key));
+            bind(key,false,()->{if(choosingDiscard){chooseDiscard(key);return;}if(!blocked)pressed.add(key);});bind(key,true,()->pressed.remove(key));
         }
         bind("SPACE",false,()-> {
             if (!spaceDown) {
@@ -112,7 +136,7 @@ public final class GamePanel extends JPanel {
         getActionMap().put(id,new AbstractAction(){public void actionPerformed(ActionEvent e){action.run();}});
     }
     private void tick() {
-        if(blocked)return;
+        if(blocked||choosingDiscard)return;
         int dx=(has("RIGHT","D")?1:0)-(has("LEFT","A")?1:0),dy=(has("DOWN","S")?1:0)-(has("UP","W")?1:0);
         if(dx==0&&dy==0)return;
         double step=GameConfig.PLAYER_SPEED*GameConfig.INPUT_TICK_MS/1000.0/Math.hypot(dx,dy);
@@ -144,7 +168,7 @@ public final class GamePanel extends JPanel {
     public void names(String mine,String other){nickname=mine;otherName=other;repaint();}
     public void opponent(StoreSnapshot next){opponent=next;repaint();}
     public void countdown(int value){countdown=value;repaint();}
-    public void setBlocked(boolean value){blocked=value;pressed.clear();if(value)clearPending();}
+    public void setBlocked(boolean value){blocked=value;pressed.clear();if(value){clearPending();choosingDiscard=false;}}
     public void resetSessionInput(){clearInput();clearPending();hideOpponent=false;}
     public void clearInput(){pressed.clear();spaceDown=false;}
     public void notice(String text){notice=text;repaint();}
@@ -168,7 +192,8 @@ public final class GamePanel extends JPanel {
         Sprites.text(g, "왼손 · " + state.hands().get(0).label()
                 + "   오른손 · " + state.hands().get(1).label(), 260, 82, 14, UiKit.CREAM);
         Interaction target=blocked?null:target();
-        String hint=pending!=null?"서버 응답 대기":target==null?"":target.hint();
+        String hint=choosingDiscard?"← "+state.hands().get(0).label()+", → "+state.hands().get(1).label()
+                :pending!=null?"서버 응답 대기":target==null?"":target.hint();
         if(opponent!=null&&!hideOpponent) {
             Sprites.text(g,"상대 식당 · "+otherName+"   만족도 "+opponent.satisfaction()+"% · 판매 "+opponent.sales()+" · 골드 "+opponent.gold(),615,82,13,UiKit.CREAM);
             drawStore(g,state,10,194,580,376,(int)x,(int)y,left,hint);
