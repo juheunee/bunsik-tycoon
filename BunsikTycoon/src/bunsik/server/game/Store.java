@@ -150,6 +150,7 @@ public final class Store {
             case MOVE -> onMove(m.getInt(0), m.getInt(1), m.getBool(2));
             case INTERACT -> onInteract(m.getInt(0), m.getInt(1), now);
             case COOK -> onCook(Menu.valueOf(m.get(0)), now);
+            case DISCARD -> onDiscard(m.getInt(0), now);
             default -> {
             }
         }
@@ -167,7 +168,7 @@ public final class Store {
         }
         onMove(x, y, chef.facingLeft);
 
-     // 인내심 0 손님 먼저 퇴장 (같은 틱의 update보다 행동이 먼저 처리되므로)
+        // 인내심 0 손님 먼저 퇴장 (같은 틱의 update보다 행동이 먼저 처리되므로)
         dropImpatientCustomers(now);
         
         if (StoreLayout.nearKitchenTarget(StoreLayout.DISH_BIN, chef.x, chef.y)) {
@@ -236,15 +237,46 @@ public final class Store {
         if (count > 0) toast("설거지통에 그릇 " + count + "개를 넣었어요.");
     }
 
+    /** 폐기 위치 INTERACT: 음식이 한 손에만 있으면 바로 폐기, 양손이면 손 선택 요청 */
     private void discardFood() {
+        int foodHand = -1;
+        int foodCount = 0;
         for (int i = 0; i < chef.hands.length; i++) {
-            Menu menu = chef.hands[i].menu();
-            if (menu != null) {
-                chef.hands[i] = Hand.EMPTY;
-                toast(menu.label + "을(를) 버렸어요.");
-                return;
+            if (chef.hands[i].menu() != null) {
+                foodHand = i;
+                foodCount++;
             }
         }
+        if (foodCount == 0) {
+            toast("버릴 음식이 없어요.");
+        } else if (foodCount == 1) {
+            discardHand(foodHand);
+        } else {
+            toast("양손에 음식이 있어요. 버릴 손을 골라 주세요.");
+        }
+    }
+
+    /** DISCARD|손(0 왼손, 1 오른손): 고른 손의 음식 폐기 */
+    private void onDiscard(int hand, long now) {
+        if (hand < 0 || hand >= chef.hands.length) {
+            throw new IllegalArgumentException("Invalid hand: " + hand);
+        }
+        if (!running(now)) {
+            return;
+        }
+        if (!StoreLayout.nearKitchenTarget(StoreLayout.DISCARD, chef.x, chef.y)) {
+            toast("폐기 위치에서만 버릴 수 있어요.");
+        } else if (chef.hands[hand].menu() == null) {
+            toast("그 손에는 버릴 음식이 없어요.");
+        } else {
+            discardHand(hand);
+        }
+    }
+
+    private void discardHand(int hand) {
+        Menu menu = chef.hands[hand].menu();
+        chef.hands[hand] = Hand.EMPTY;
+        toast((hand == 0 ? "왼손" : "오른손") + "의 " + menu.label + "을(를) 버렸어요.");
     }
 
     private void serve(Table t, int no, long now) {
