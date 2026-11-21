@@ -17,10 +17,10 @@ public final class GamePanel extends JPanel {
     private final Consumer<Message> sender;
     private final Timer timer;
     private double x=state.chefX(),y=state.chefY();
-    private boolean left,blocked=true,hideOpponent,spaceDown,noticeBeforeState;
+    private boolean left,blocked=true,versus,hideOpponent,hDown,spaceDown,noticeBeforeState;
     private String notice="서버 시작 대기 중",nickname="사장님",otherName="상대";
     private int countdown=-1;
-    private final JButton exit;
+    private final JButton exit, opponentButton;
     private record Interaction(Menu station, int table, String hint, boolean available, boolean cook) {
         Interaction(int table, String hint, boolean available) {
             this(null, table, hint, available, false);
@@ -115,6 +115,13 @@ public final class GamePanel extends JPanel {
     public GamePanel(Consumer<Message> sender,Runnable onExit) {
         this.sender=sender;setLayout(null);setPreferredSize(new Dimension(1200,700));UiKit.style(this);setFocusable(true);
         exit=UiKit.button("나가기",new Color(103,69,47),onExit);add(exit);exit.setFocusable(false);
+        opponentButton=UiKit.button("상대 식당 숨기기",new Color(103,69,47),()-> {
+            toggleOpponent();
+            requestFocusInWindow();
+        });
+        opponentButton.setFocusable(false);
+        opponentButton.setVisible(false);
+        add(opponentButton);
         bind("ESCAPE",false,onExit);
         for(String key:new String[]{"UP","DOWN","LEFT","RIGHT","W","A","S","D"}) {
             bind(key,false,()->{if(choosingDiscard){chooseDiscard(key);return;}if(!blocked)pressed.add(key);});bind(key,true,()->pressed.remove(key));
@@ -126,7 +133,12 @@ public final class GamePanel extends JPanel {
             }
         });
         bind("SPACE",true,()->spaceDown=false);
-        bind("H",false,()->{hideOpponent=!hideOpponent;repaint();});
+        bind("H",false,()-> {
+            if (hDown) return;
+            hDown = true;
+            toggleOpponent();
+        });
+        bind("H",true,()->hDown=false);
         addFocusListener(new FocusAdapter(){@Override public void focusLost(FocusEvent e){clearInput();}});
         timer=new Timer(GameConfig.INPUT_TICK_MS,e->tick());
     }
@@ -167,12 +179,32 @@ public final class GamePanel extends JPanel {
     public StoreSnapshot state(){return state;}
     public void names(String mine,String other){nickname=mine;otherName=other;repaint();}
     public void opponent(StoreSnapshot next){opponent=next;repaint();}
+    StoreSnapshot opponentState(){return opponent;}
+    public void setVersus(boolean value) {
+        versus = value;
+        opponentButton.setVisible(value);
+        revalidate();
+        repaint();
+    }
+    private void toggleOpponent() {
+        if (!versus) return;
+        hideOpponent = !hideOpponent;
+        refreshOpponentButton();
+    }
+    private void refreshOpponentButton() {
+        opponentButton.setText(hideOpponent ? "상대 식당 보기" : "상대 식당 숨기기");
+        repaint();
+    }
     public void countdown(int value){countdown=value;repaint();}
     public void setBlocked(boolean value){blocked=value;pressed.clear();if(value){clearPending();choosingDiscard=false;}}
-    public void resetSessionInput(){clearInput();clearPending();hideOpponent=false;}
-    public void clearInput(){pressed.clear();spaceDown=false;}
+    public void resetSessionInput(){clearInput();clearPending();hideOpponent=false;refreshOpponentButton();}
+    public void clearInput(){pressed.clear();spaceDown=false;hDown=false;}
     public void notice(String text){notice=text;repaint();}
-    @Override public void doLayout(){UiKit.bounds(this,exit,1060,64,120,26);}
+    @Override public void doLayout(){
+        if (versus) UiKit.bounds(this,exit,924,16,120,30);
+        else UiKit.bounds(this,exit,1060,64,120,26);
+        UiKit.bounds(this,opponentButton,740,16,170,30);
+    }
     @Override public void addNotify(){super.addNotify();timer.start();}
     @Override public void removeNotify(){timer.stop();clearInput();super.removeNotify();}
     @Override protected void paintComponent(Graphics graphics) {
@@ -189,23 +221,50 @@ public final class GamePanel extends JPanel {
         long seconds=(state.timeLeftMs()+999)/1000;Sprites.center(g,String.format("%d:%02d",seconds/60,seconds%60),1122,45,24,Sprites.YELLOW);
         g.setColor(new Color(63,38,22));g.fillRect(0,60,1200,32);
         Sprites.text(g,"내 식당 · "+nickname,14,82,14,Sprites.YELLOW);
-        Sprites.text(g, "왼손 · " + state.hands().get(0).label()
-                + "   오른손 · " + state.hands().get(1).label(), 260, 82, 14, UiKit.CREAM);
+        boolean split = versus && !hideOpponent;
+        String hands = "왼손 · " + state.hands().get(0).label() + "   오른손 · " + state.hands().get(1).label();
+        if (split) Sprites.text(g,hands,14,138,14,UiKit.CREAM);
+        else Sprites.text(g,hands,versus ? 420 : 260,82,14,UiKit.CREAM);
         Interaction target=blocked?null:target();
         String hint=choosingDiscard?"← "+state.hands().get(0).label()+", → "+state.hands().get(1).label()
                 :pending!=null?"서버 응답 대기":target==null?"":target.hint();
-        if(opponent!=null&&!hideOpponent) {
-            Sprites.text(g,"상대 식당 · "+otherName+"   만족도 "+opponent.satisfaction()+"% · 판매 "+opponent.sales()+" · 골드 "+opponent.gold(),615,82,13,UiKit.CREAM);
-            drawStore(g,state,10,194,580,376,(int)x,(int)y,left,hint);
-            drawStore(g,opponent,610,194,580,376,opponent.chefX(),opponent.chefY(),opponent.facingLeft(),"");
+        if (split) {
+            Sprites.text(g,"상대 식당 · "+otherName,615,82,14,Sprites.YELLOW);
+            drawVersusStore(g,state,10,150,580,510,(int)x,(int)y,left,hint);
+            if (opponent == null) {
+                Sprites.center(g,"상대 식당 상태를 기다리는 중",900,400,18,UiKit.CREAM);
+            } else {
+                String satisfaction = opponent.satisfaction()<0 ? "-" : opponent.satisfaction()+"%";
+                Sprites.text(g,"골드 "+opponent.gold()+" · 손님 "+opponent.servedCustomers()+" · 판매 "
+                        +opponent.sales()+" · 만족도 "+satisfaction,615,138,13,UiKit.CREAM);
+                drawVersusStore(g,opponent,610,150,580,510,opponent.chefX(),opponent.chefY(),opponent.facingLeft(),"");
+            }
             g.setColor(new Color(19,12,8));g.fillRect(598,92,4,578);
+        } else if (versus) {
+            drawVersusStore(g,state,10,98,1180,566,(int)x,(int)y,left,hint);
         } else drawStore(g,state,165,98,870,566,(int)x,(int)y,left,hint);
-        Sprites.center(g,"방향키/WASD 이동   SPACE 조리 · 픽업 · 주문 · 서빙 · 청소   ESC 나가기"+(opponent==null?"":"   H 상대 식당 숨기기"),600,690,12,UiKit.CREAM);
+        Sprites.center(g,"방향키/WASD 이동   SPACE 조리 · 픽업 · 주문 · 서빙 · 청소   ESC 나가기"
+                +(versus?"   H 상대 식당 표시 전환":""),600,690,12,UiKit.CREAM);
         if(!notice.isEmpty()){Sprites.rounded(g,360,98,480,26,20,new Color(54,34,18,230),null);Sprites.center(g,notice,600,116,12,Sprites.YELLOW);}
         if(countdown>0){g.setColor(new Color(0,0,0,145));g.fillRect(0,92,1200,578);Sprites.center(g,""+countdown,600,422,135,Sprites.RED);Sprites.center(g,""+countdown,600,416,125,Sprites.YELLOW);Sprites.center(g,"손님이 곧 들어와요! 방향키로 움직이고 스페이스로 일해요",600,478,20,Color.WHITE);}
         g.dispose();
     }
-    private static void drawStore(Graphics2D g,StoreSnapshot state,int bx,int by,int w,int h,int x,int y,boolean left,String hint){
-        Graphics2D room=(Graphics2D)g.create();room.translate(bx,by);room.scale(w/640.0,h/480.0);room.clipRect(0,0,640,480);StoreRenderer.paint(room,state,x,y,left,g2->KitchenOverlay.paint(g2,state),hint);room.dispose();
+    private void drawVersusStore(Graphics2D g,StoreSnapshot snapshot,int bx,int by,int w,int h,
+                                 int chefX,int chefY,boolean facingLeft,String hint) {
+        double canvasX = getWidth()/1200.0;
+        double canvasY = getHeight()/700.0;
+        double scale = Math.min(w*canvasX/StoreLayout.WIDTH,h*canvasY/StoreLayout.HEIGHT);
+        double width = scale*StoreLayout.WIDTH/canvasX;
+        double height = scale*StoreLayout.HEIGHT/canvasY;
+        drawStore(g,snapshot,bx+(w-width)/2,by+(h-height)/2,width,height,chefX,chefY,facingLeft,hint);
+    }
+    private static void drawStore(Graphics2D g,StoreSnapshot state,double bx,double by,double w,double h,
+                                  int x,int y,boolean left,String hint){
+        Graphics2D room=(Graphics2D)g.create();
+        room.translate(bx,by);
+        room.scale(w/StoreLayout.WIDTH,h/StoreLayout.HEIGHT);
+        room.clipRect(0,0,StoreLayout.WIDTH,StoreLayout.HEIGHT);
+        StoreRenderer.paint(room,state,x,y,left,g2->KitchenOverlay.paint(g2,state),hint);
+        room.dispose();
     }
 }
