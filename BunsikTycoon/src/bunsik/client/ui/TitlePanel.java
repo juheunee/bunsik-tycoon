@@ -18,8 +18,9 @@ public final class TitlePanel extends JPanel {
         for(JTextField field:new JTextField[]{nickname,host,port}) {UiKit.style(field);field.setBackground(Color.WHITE);field.setBorder(BorderFactory.createCompoundBorder(BorderFactory.createLineBorder(new Color(173,159,137),2),BorderFactory.createEmptyBorder(3,10,3,10)));add(field);}
         solo=UiKit.button("혼자 하기 (1P)",UiKit.ORANGE,()->start("SOLO",onStart));
         versus=UiKit.button("경쟁 하기 (2P)",Sprites.RED,()->start("VERSUS",onStart));
-        demo=UiKit.button("화면 미리보기",new Color(122,83,56),preview);
-        add(solo);add(versus);add(demo);
+        demo=preview == null ? null : UiKit.button("화면 미리보기",new Color(122,83,56),preview);
+        add(solo);add(versus);
+        if (demo != null) add(demo);
     }
     private void start(String mode,Consumer<Connection> callback) {
         String name=nickname.getText().trim();
@@ -39,7 +40,8 @@ public final class TitlePanel extends JPanel {
     public void reset(String text) {solo.setEnabled(true);versus.setEnabled(true);status=text;repaint();}
     @Override public void doLayout() {
         UiKit.bounds(this,nickname,490,301,300,39);UiKit.bounds(this,host,490,353,300,39);UiKit.bounds(this,port,490,405,300,39);
-        UiKit.bounds(this,solo,410,468,181,54);UiKit.bounds(this,versus,608,468,181,54);UiKit.bounds(this,demo,500,536,200,34);
+        UiKit.bounds(this,solo,410,468,181,54);UiKit.bounds(this,versus,608,468,181,54);
+        if (demo != null) UiKit.bounds(this,demo,500,536,200,34);
     }
     @Override protected void paintComponent(Graphics graphics) {
         super.paintComponent(graphics);Graphics2D g=UiKit.canvas(this,graphics);UiKit.backdrop(g);

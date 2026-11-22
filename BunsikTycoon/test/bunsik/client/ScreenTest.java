@@ -93,9 +93,9 @@ public final class ScreenTest {
                 game.setBlocked(true);
                 space(game);
                 check(actions.size()==11,"ending blocks interactions");
-                game.countdown(3);render(game,"countdown");game.countdown(0);game.opponent(state);render(game,"versus");
-                var result=new ResultPanel(()->{},()->{});result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"));render(result,"result");
-                try {result.showResult(new Message(MessageType.GAME_OVER,2,1,"주흔:84:21:742:25"));throw new AssertionError("invalid winner");}catch(IllegalArgumentException expected){}
+                game.countdown(3);render(game,"countdown");game.countdown(0);game.setVersus(true);game.opponent(state);render(game,"versus");
+                var result=new ResultPanel(()->{},()->{});result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"),0);render(result,"result");
+                try {result.showResult(new Message(MessageType.GAME_OVER,2,1,"주흔:84:21:742:25"),0);throw new AssertionError("invalid winner");}catch(IllegalArgumentException expected){}
                 var lobby=new LobbyPanel(b->{},()->{});lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);render(lobby,"lobby");
                 System.out.println("ScreenTest: PASS (10 renders, keyboard targets, cook/serve/discard locks, result validation)");
             }catch(Exception e){throw new RuntimeException(e);}

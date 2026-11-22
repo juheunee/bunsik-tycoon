@@ -8,7 +8,7 @@ Java 소켓으로 만든 1인/2인 실시간 분식집 운영 게임
 > 현재 구현 상태와 새 클라이언트 실행법은 [2주차 클라이언트 구현](docs/client-week2.md)을 참고합니다.
 > 아래 부엌 스크린샷은 초기 드래그 방식입니다. 현재 1P 조작은 3절을 참고합니다.
 
-![Java](https://img.shields.io/badge/Java-17+-D83A2B?logo=openjdk&logoColor=white)
+![Java](https://img.shields.io/badge/Java-21+-D83A2B?logo=openjdk&logoColor=white)
 ![Swing](https://img.shields.io/badge/GUI-Swing-F08A24)
 ![Socket](https://img.shields.io/badge/Network-TCP%20Socket-4C9A2A)
 ![Status](https://img.shields.io/badge/status-MVP-FFC93C)
@@ -103,7 +103,7 @@ flowchart LR
 | `SPACE` (설거지통 앞) | 양손의 빈 그릇 내려놓기 |
 | `SPACE` (부엌의 폐기 표시 앞) | 들고 있던 음식 버리기 |
 | `ESC` | 영업에서 나와 타이틀로 돌아가기 |
-| `H` | (2P) 상대 식당 숨기기 / 보기 |
+| `H` 또는 화면의 상대 식당 버튼 | (2P) 상대 식당 숨기기 / 보기 |
 | 마우스 클릭 또는 `Tab`으로 이동 후 `SPACE` | 시작 화면 · 대기실 · 결과 화면의 버튼 |
 
 ### 3-3. 손님과 인내심
@@ -134,23 +134,25 @@ flowchart LR
 
 ### 4-1. 준비물
 
-- **JDK 17 이상** (터미널에서 `java -version`, `javac -version`으로 확인)
+- **JDK 21 이상** (터미널에서 `java -version`, `javac -version`으로 확인)
 - 외부 라이브러리와 빌드 도구는 필요 없습니다. 순수 Java(Swing + Socket)만 사용합니다.
 
 ### 4-2. 내려받기와 빌드
 
 ```bash
-git clone https://github.com/<팀계정>/bunsik-king.git
-cd bunsik-king
+git clone https://github.com/juheunee/bunsik-tycoon.git
+cd bunsik-tycoon
 ```
 
-| | Windows | macOS / Linux |
-|---|---|---|
-| 빌드 | `build.bat` | `./build.sh` |
-| 서버 실행 | `run-server.bat` | `./run-server.sh` |
-| 클라이언트 실행 | `run-client.bat` | `./run-client.sh` |
+Windows PowerShell에서 `.\verify-game.cmd`를 실행하면 빌드와 자동 검증을 수행합니다. macOS 또는 Linux에서 빌드할 때는 아래 명령을 사용합니다.
 
-> 실행 스크립트는 `out/` 폴더가 없으면 자동으로 먼저 빌드합니다. **코드를 고친 뒤에는 빌드를 다시** 해 주세요.
+```bash
+mkdir -p out
+find BunsikTycoon/src -name '*.java' > out/sources.txt
+javac --release 21 -encoding UTF-8 -d out @out/sources.txt
+```
+
+저장소 루트의 서로 다른 터미널에서 서버는 `java -cp out bunsik.server.ServerMain`, 클라이언트는 `java -cp out bunsik.client.ClientMain`으로 실행합니다. 서버 창에서 **서버 시작**을 누른 뒤 클라이언트를 접속합니다.
 
 ### 4-3. 혼자 하기 (노트북 1대)
 
@@ -162,7 +164,7 @@ cd bunsik-king
 ```mermaid
 flowchart LR
     subgraph A["A 노트북"]
-        S[서버<br/>run-server]
+        S[서버<br/>ServerMain]
         CA[클라이언트 A<br/>localhost로 접속]
     end
     subgraph B["B 노트북"]
@@ -176,6 +178,7 @@ flowchart LR
 2. A 노트북에서 클라이언트를 실행하고, 서버 IP `localhost`로 **경쟁 하기**를 누릅니다.
 3. **B 노트북**에서 클라이언트를 실행하고, 서버 IP에 1번에서 본 A의 IP(예: `192.168.0.12`)를 입력한 뒤 **경쟁 하기**를 누릅니다.
 4. 대기실에서 두 사람 모두 **준비**를 누르면 3초 카운트다운 후 시작합니다.
+5. 결과 화면에서 **대기실로**를 누르면 접속을 유지한 채 돌아갑니다. 두 사람이 다시 준비하면 다음 경기가 시작됩니다.
 
 > 노트북 1대로 시험할 때는 클라이언트를 두 개 띄우고 둘 다 `localhost`로 접속하면 됩니다.
 
@@ -183,12 +186,12 @@ flowchart LR
 
 **IntelliJ IDEA**
 1. `File > Open`으로 저장소 폴더를 엽니다.
-2. `File > Project Structure > Project`에서 SDK를 17 이상으로 맞추고, `Modules`에서 `src` 폴더를 **Sources**로 지정합니다.
+2. `File > Project Structure > Project`에서 SDK를 21 이상으로 맞추고, `Modules`에서 `src` 폴더를 **Sources**로 지정합니다.
 3. `bunsik.server.ServerMain`과 `bunsik.client.ClientMain`을 각각 실행합니다.
 4. 실행 설정(Run Configuration)의 **Working directory는 저장소 최상위 폴더**여야 `config.properties`를 찾습니다. 클라이언트를 두 개 띄우려면 `Modify options > Allow multiple instances`를 켭니다.
 
 **Eclipse**
-1. `File > New > Java Project`에서 `Use default location`을 끄고 저장소 폴더를 고릅니다(JRE 17 이상).
+1. `File > New > Java Project`에서 `Use default location`을 끄고 저장소 폴더를 고릅니다(JDK 21 이상).
 2. `src`가 소스 폴더로 잡혔는지 확인하고, 위 두 클래스를 `Run As > Java Application`으로 실행합니다.
 
 ### 4-6. 연결이 안 될 때
@@ -198,7 +201,7 @@ flowchart LR
 | "서버에 연결할 수 없어요" | 서버가 켜져 있는지, IP와 포트가 맞는지 확인합니다. |
 | 같은 노트북에서는 되는데 다른 노트북에서 안 됨 | 서버 노트북 **방화벽**에서 Java를 허용합니다(Windows는 첫 실행 때 뜨는 허용 창에서 "개인 네트워크"를 체크). |
 | 학교 와이파이에서만 안 됨 | 학교 와이파이는 기기끼리 통신을 막아 둔 경우가 많습니다. **휴대폰 핫스팟**에 두 노트북을 연결해 보세요. |
-| "포트가 이미 사용 중" | 서버가 이미 켜져 있거나 다른 프로그램이 쓰는 중입니다. `run-server.bat 6000`처럼 다른 포트로 실행하고, 클라이언트 포트도 똑같이 맞춥니다. |
+| "포트가 이미 사용 중" | 서버가 이미 켜져 있거나 다른 프로그램이 쓰는 중입니다. 서버 창에서 다른 포트를 입력해 시작하고 클라이언트도 같은 포트로 맞춥니다. |
 
 ---
 
@@ -210,17 +213,16 @@ Java에는 `.env`를 쓰는 관례가 없어서, 같은 역할을 **두 개의 p
 
 | 파일 | Git | 용도 |
 |---|---|---|
-| `config.properties` | 올림 | 팀 공용 기본값(포트 5000, `localhost`) |
-| `config.local.properties` | **제외** | 내 노트북 전용 값(예: B 노트북이 접속할 A의 IP, 내 닉네임) |
+| `config.properties` | 올림 | 팀 공용 기본값(포트 9999, `127.0.0.1`) |
+| `config.local.properties` | **제외** | 내 노트북 전용 값(예: B 노트북이 접속할 A의 IP) |
 
 `config.local.properties.example`을 복사해 이름을 `config.local.properties`로 바꿔 쓰면 됩니다. 비밀번호 같은 민감한 정보는 없지만, 사람마다 다른 IP가 공용 파일에 섞여 서로의 설정을 덮어쓰는 일을 막기 위해 분리했습니다.
 
 ```properties
 # config.properties
-server.port=5000
-client.host=localhost
-client.port=5000
-client.nickname=
+server.host=127.0.0.1
+server.port=9999
+client.connectTimeoutMs=5000
 ```
 
 ### 5-2. `.gitignore`에 넣은 것
@@ -279,9 +281,8 @@ bunsik-king/
 ├─ docs/screenshots/   ← README 이미지
 ├─ config.properties   ← 공용 설정
 ├─ config.local.properties.example
-├─ build.sh / build.bat
-├─ run-server.sh / run-server.bat
-├─ run-client.sh / run-client.bat
+├─ verify-foundation.cmd
+├─ verify-game.cmd
 ├─ .gitignore
 └─ .gitattributes
 ```
@@ -502,13 +503,14 @@ STATE|0|128000|214|7|6|84|300|296|true|TTEOKBOKKI|DISH|GIMBAP:1700,SUNDAE:0|WAIT
 - [x] **A3 공통 게임 계약 (주흔 jh)**: 기존 README·SPEC 기준 합의 완료. 메뉴·상태·설정·좌표·STATE 왕복 변환 구현
 - [x] **A4 게임 화면 (주흔 jh)**: 스크린샷 기반 임시 상태 표시, 이동·경계·안내, 비동기 네트워크. 렌더링·루프백 소켓 검증 완료. 접속/상태 대기 분리와 실패·재시도 검사 보완 (실제 GUI·게임 서버 연동은 별도 검증)
 - [ ] **A5 1P 흐름 (주흔 jh)**: 키보드 메뉴 선택·조리·서빙·폐기·결과·다시 하기. 메뉴별 독립 조리, 픽업, 양손 운반과 설거지통 구현. 실제 1P 플레이 확인 대기
+- [x] **A6 2P 경쟁 화면 (주흔 jh)**: 준비·취소, 시작 입력 잠금, 슬롯별 화면, 상대 식당 표시 전환, 서버 결과와 같은 연결로 대기실 복귀. 두 노트북과 실제 키보드 검증은 아래 실전 테스트에서 확인
 
 **1차 기반 구축**
 - [x] **채팅 기반 (주흔 jh)**: CHAT 규약·독립 서버·클라이언트 구현, 두 소켓 자동 검증 완료. 게임 화면 연동과 두 노트북 테스트는 후속 작업
 - [x] **공통 메시지·설정 (주흔 jh)**: `MessageType`, `Message`, `AppConfig`, 설정 파일 구현 및 Java 21 대상 컴파일·자동 검증 완료. 서버 연동과 두 클라이언트 통신 검증은 서버 기반 작업 후 진행
 
 **제안서 기능 중 아직 안 한 것**
-- [ ] **오류 수정**: 2p 활동 중 H 키보드 작동 안함
+- [ ] **2P H키 실전 확인**: 키를 길게 눌렀을 때 한 번만 전환되는지, 상대 식당 버튼 사용 후 이동·SPACE가 동작하는지 실제 키보드로 확인
 - [ ] **게임 중 채팅**: 메시지 종류(`CHAT`) 추가, `Enter`로 입력창 열기, 보낸 뒤 게임 조작으로 포커스 되돌리기
 - [ ] **이모티콘 채팅**: 이미지 대신 `:smile:` 같은 코드를 보내고 받는 쪽이 이미지로 바꿔 보여 주기
 - [ ] **정식 연결 끊김 처리 (차민 cm)***: 상대에게 알림, 남은 사람 승리 처리 또는 대기실 복귀, 일시 정지 및 중단(시작 화면 복귀), 서버 종료 시 클라이언트 안내, 하트비트로 끊김 빨리 감지
