@@ -8,10 +8,14 @@ import java.util.concurrent.*;
 import java.util.function.Consumer;
 import javax.swing.SwingUtilities;
 
-/** 접속·송신·수신은 EDT 밖에서 수행한다. 세션마다 새 객체를 사용한다. */
+/** 접속·송신·수신은 EDT 밖에서 수행함. 세션마다 새 객체를 사용 */
 public final class NetworkClient implements AutoCloseable {
     private final ExecutorService sender = Executors.newSingleThreadExecutor(r -> {
         Thread t = new Thread(r, "game-sender"); t.setDaemon(true); return t;
+    });
+    // 2초마다 PING. 서버는 6초 무응답 접속을 끊으므로 이동이 없는 대기실, 정지 중에도 연결 유지
+    private final ScheduledExecutorService heartbeat = Executors.newSingleThreadScheduledExecutor(r -> {
+        Thread t = new Thread(r, "client-heartbeat"); t.setDaemon(true); return t;
     });
     private final Consumer<Message> receiver;
     private final Consumer<String> disconnected;
@@ -42,10 +46,15 @@ public final class NetworkClient implements AutoCloseable {
                 connection.connect(new InetSocketAddress(host, port), timeoutMs);
                 if (leaving) { close(); return; }
                 connection.setTcpNoDelay(true);
+                // 서버도 2초마다 PING을 보내므로 6초 동안 수신이 없으면 끊긴 것으로 판단
+                connection.setSoTimeout(6000);
                 writer = new BufferedWriter(new OutputStreamWriter(connection.getOutputStream(), StandardCharsets.UTF_8));
                 write(new Message(MessageType.HELLO, nickname, mode));
                 Thread reader = new Thread(() -> read(connection), "game-receiver");
                 reader.setDaemon(true); reader.start();
+                // 접속 직후 close()가 먼저 실행된 경우 예약 거절은 무시
+                try { heartbeat.scheduleAtFixedRate(() -> send(new Message(MessageType.PING)), 2, 2, TimeUnit.SECONDS); }
+                catch (RejectedExecutionException ignored) { }
             } catch (IOException | IllegalArgumentException e) { fail("접속 실패: " + e.getMessage()); }
         });
     }
@@ -55,7 +64,7 @@ public final class NetworkClient implements AutoCloseable {
             while (!closed && (line = input.readLine()) != null) {
                 try {
                     Message message = Message.parse(line);
-                    // EOF보다 먼저 수신한 결과도 EDT 순서대로 전달한다. 화면은 세션 번호로 이전 접속을 거른다.
+                    // EOF보다 먼저 수신한 결과도 EDT 순서대로 전달함. 화면은 세션 번호로 이전 접속을 거름.
                     SwingUtilities.invokeLater(() -> receiver.accept(message));
                 } catch (IllegalArgumentException e) { fail("잘못된 서버 메시지"); return; }
             }
@@ -99,6 +108,7 @@ public final class NetworkClient implements AutoCloseable {
     }
     @Override public synchronized void close() {
         closed = true;
+        heartbeat.shutdownNow();
         Socket connection = socket;
         if (connection != null) try { connection.close(); } catch (IOException ignored) { }
         // Socket.close unblocks I/O; queued sends observe closed and do no work.
