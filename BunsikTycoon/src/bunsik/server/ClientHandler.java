@@ -2,6 +2,7 @@ package bunsik.server;
 
 import bunsik.common.Message;
 import bunsik.common.MessageType;
+import bunsik.common.ChatMessages;
 
 import java.io.BufferedReader;
 import java.io.BufferedWriter;
@@ -87,6 +88,16 @@ public final class ClientHandler implements Runnable {
                 server.onHello(this, versus, first);
             }
             case READY -> server.lobby().setReady(this, m.getBool(0));
+            case CHAT -> {
+                try {
+                    ChatMessages.requestText(m);
+                    GameRoom r = room;
+                    if (r != null) r.enqueue(slot, m);
+                    else server.lobby().broadcastChat(this, m);
+                } catch (IllegalArgumentException e) {
+                    send(MessageType.TOAST, "채팅은 1~200자로 입력해 주세요.");
+                }
+            }
             case LEAVE -> {
                 return false;
             }

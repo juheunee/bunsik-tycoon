@@ -13,6 +13,7 @@ public final class LobbyPanel extends JPanel {
     private int myId = -1;
     private Boolean requestedReady;
     private final JButton readyButton,exit;
+    private ChatPanel chat;
     public LobbyPanel(Consumer<Boolean> onReady,Runnable leave){
         setLayout(null);
         readyButton=UiKit.button("준비",Sprites.RED,()-> {
@@ -47,6 +48,12 @@ public final class LobbyPanel extends JPanel {
         refresh();
     }
     public boolean hasLocalPlayer() { return localPlayer() != null; }
+    public void setChatPanel(ChatPanel next) {
+        if (chat != null) remove(chat);
+        chat = next;
+        if (chat != null) add(chat);
+        revalidate(); repaint();
+    }
     public boolean isAwaitingReady() { return requestedReady != null; }
     private Player localPlayer() {
         return players.stream().filter(player -> player.id() == myId).findFirst().orElse(null);
@@ -60,7 +67,7 @@ public final class LobbyPanel extends JPanel {
         readyButton.setEnabled(local != null && requestedReady == null && !allReady());
         repaint();
     }
-    @Override public void doLayout(){UiKit.bounds(this,readyButton,410,480,220,56);UiKit.bounds(this,exit,646,480,144,56);}
+    @Override public void doLayout(){UiKit.bounds(this,readyButton,410,480,220,56);UiKit.bounds(this,exit,646,480,144,56);if(chat!=null)UiKit.bounds(this,chat,36,465,350,190);}
     @Override protected void paintComponent(Graphics graphics){
         super.paintComponent(graphics);Graphics2D g=UiKit.canvas(this,graphics);UiKit.backdrop(g);
         Sprites.center(g,"경쟁 모드 대기실",600,132,38,Sprites.RED);
@@ -76,7 +83,7 @@ public final class LobbyPanel extends JPanel {
             Graphics2D chef=(Graphics2D)g.create();chef.translate(x+150,322);chef.scale(1.65,1.65);Sprites.chef(chef,0,0,false,null);chef.dispose();
             Sprites.center(g,p==null?"입장 대기 중":p.name(),x+150,380,23,UiKit.INK);
             Sprites.rounded(g,x+90,392,120,32,30,p!=null&&p.ready()?new Color(74,155,39):new Color(202,191,172),null);
-            Sprites.center(g,p==null?"빈 자리":p.ready()?"준비 완료":"준비 중",x+150,414,15,Color.WHITE);
+            Sprites.center(g,p==null?"빈 자리":p.ready()?"준비":"대기",x+150,414,15,Color.WHITE);
         }
         g.setColor(Sprites.YELLOW);g.fillOval(568,284,64,64);g.setColor(new Color(177,39,26));g.setStroke(new BasicStroke(5));g.drawOval(568,284,64,64);Sprites.center(g,"VS",600,327,27,new Color(177,39,26));g.dispose();
     }

@@ -1,5 +1,7 @@
 package bunsik.server;
 
+import bunsik.common.ChatMessages;
+import bunsik.common.Message;
 import bunsik.common.MessageType;
 
 import java.util.ArrayList;
@@ -62,6 +64,12 @@ final class VersusLobby {
 
     synchronized boolean contains(ClientHandler h) {
         return members.contains(h);
+    }
+
+    synchronized void broadcastChat(ClientHandler sender, Message request) {
+        if (playing || !members.contains(sender)) return;
+        Message response = ChatMessages.broadcast(sender.id(), sender.nickname(), request);
+        for (ClientHandler member : members) member.send(response);
     }
 
     synchronized void leave(ClientHandler h) {
