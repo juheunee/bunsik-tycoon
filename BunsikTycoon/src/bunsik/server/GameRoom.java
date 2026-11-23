@@ -18,6 +18,8 @@ public final class GameRoom {
 
     private static final int TICK_MS = 100;
     private static final int COUNTDOWN_SEC = 3;
+    /** 경쟁 중 상대 끊김 시 정지 후 종료까지 대기 시간 */
+    private static final int LEFT_NOTICE_MS = 3000;
 
     private record Command(int slot, Message message) {
     }
@@ -33,6 +35,13 @@ public final class GameRoom {
 
     private volatile boolean finished;
     private long endAt = Long.MAX_VALUE;
+    // 아래 상태는 게임 루프 스레드에서만 읽고 씀
+    private boolean started;
+    // 상대 끊김으로 종료 대기 중 (일시정지 해제와 새 정지 요청 거부)
+    private boolean closing;
+    // 게임 시계 = 실제 시각 - 정지했던 시간 합계 (정지 중이면 정지 시작 시각에 고정)
+    private long pausedTotal;
+    private long pausedAt = -1;
 
     /** onFinished: 게임 종료 후 실행할 작업 (없으면 null) */
     GameRoom(GameServer server, List<ClientHandler> players, boolean versus, Runnable onFinished) {
@@ -54,6 +63,12 @@ public final class GameRoom {
         });
     }
 
+    /** 정지 시간을 뺀 게임 시계 */
+    private long gameNow() {
+        long real = pausedAt >= 0 ? pausedAt : System.currentTimeMillis();
+        return real - pausedTotal;
+    }
+
     /** START 전송 -> 카운트다운 -> 시작 */
     void start() {
         String nick0 = players.get(0).nickname();
@@ -62,7 +77,7 @@ public final class GameRoom {
             players.get(i).joinRoom(this, i);
             sendTo(i, new Message(MessageType.START, i, players.size(), nick0, nick1));
         }
-        broadcastSnapshots(System.currentTimeMillis());
+        broadcastSnapshots(gameNow());
 
         for (int sec = COUNTDOWN_SEC; sec >= 1; sec--) {
             final int s = sec;
@@ -76,11 +91,12 @@ public final class GameRoom {
         if (finished) {
             return;
         }
-        long now = System.currentTimeMillis();
+        long now = gameNow();
         for (Store s : stores) {
             s.begin(now);
         }
         endAt = now + GameConfig.GAME_DURATION_MS;
+        started = true;
         broadcast(new Message(MessageType.COUNTDOWN, 0));
         server.log("게임 시작 (" + (versus ? "경쟁 모드" : "혼자 하기") + ")");
         loop.scheduleAtFixedRate(this::tick, 0, TICK_MS, TimeUnit.MILLISECONDS);
@@ -99,15 +115,18 @@ public final class GameRoom {
             if (finished) {
                 return;
             }
-            long now = System.currentTimeMillis();
             Command c;
             while ((c = commands.poll()) != null) {
-                apply(c, now);
+                apply(c);
             }
-            for (int i = 0; i < stores.length; i++) {
-                stores[i].update(now);
-                for (Message e : stores[i].drainEvents()) {
-                    sendTo(i, e);
+            // PAUSE 요청이 시계를 바꿀 수 있으므로 행동 처리 뒤에 시각을 읽음
+            long now = gameNow();
+            if (pausedAt < 0) {
+                for (int i = 0; i < stores.length; i++) {
+                    stores[i].update(now);
+                    for (Message e : stores[i].drainEvents()) {
+                        sendTo(i, e);
+                    }
                 }
             }
             broadcastSnapshots(now);
@@ -119,12 +138,32 @@ public final class GameRoom {
         }
     }
 
-    private void apply(Command c, long now) {
+    private void apply(Command c) {
+        Message m = c.message();
         try {
-            stores[c.slot()].handle(c.message(), now);
+            if (m.type() == MessageType.PAUSE) {
+                setPaused(m.getBool(0));
+            } else if (pausedAt < 0) {
+                stores[c.slot()].handle(m, gameNow());
+            }
         } catch (IllegalArgumentException e) {
-            server.log("잘못된 게임 요청 무시: " + c.message().encode());
+            server.log("잘못된 게임 요청 무시: " + m.encode());
         }
+    }
+
+    /** 일시정지와 재개 (혼자 하기 영업 중에만, 경쟁은 공정성 때문에 무시) */
+    private void setPaused(boolean pause) {
+        if (versus || !started || closing || pause == (pausedAt >= 0)) {
+            return;
+        }
+        if (pause) {
+            pausedAt = System.currentTimeMillis();
+        } else {
+            pausedTotal += System.currentTimeMillis() - pausedAt;
+            pausedAt = -1;
+        }
+        broadcast(new Message(MessageType.PAUSE, pause));
+        server.log("일시정지 " + (pause ? "시작" : "해제"));
     }
 
     private void broadcastSnapshots(long now) {
@@ -179,22 +218,47 @@ public final class GameRoom {
         return new Message(MessageType.GAME_OVER, args);
     }
 
-    /** 게임 중 퇴장 (전원 퇴장 시 방 정리) */
+    /** 게임 중 퇴장 (수신 스레드 호출용, 처리는 게임 루프 스레드에 넘김) */
     void onPlayerLeft(ClientHandler h) {
         int idx = players.indexOf(h);
         if (idx < 0) {
             return;
         }
         connected[idx].set(false);
-        for (AtomicBoolean b : connected) {
-            if (b.get()) {
-                return;
-            }
-        }
         try {
-            loop.execute(() -> endGame(versus ? -1 : -2));
+            loop.execute(() -> handleLeft(idx));
         } catch (RejectedExecutionException ignored) {
         }
+    }
+
+    /** 전원 퇴장: 즉시 정리, 카운트다운 중 상대 끊김: 즉시 남은 사람 승리, 영업 중: 정지와 안내 후 3초 뒤 승리 */
+    private void handleLeft(int leftSlot) {
+        if (finished || closing) {
+            return;
+        }
+        server.log("게임 중 퇴장: " + players.get(leftSlot).nickname());
+        int remaining = -1;
+        for (int i = 0; i < connected.length; i++) {
+            if (connected[i].get()) {
+                remaining = i;
+            }
+        }
+        if (remaining < 0) {
+            endGame(versus ? -1 : -2);
+            return;
+        }
+        if (!started) {
+            endGame(remaining);
+            return;
+        }
+        closing = true;
+        if (pausedAt < 0) {
+            pausedAt = System.currentTimeMillis();
+        }
+        final int winner = remaining;
+        sendTo(winner, new Message(MessageType.PAUSE, true));
+        sendTo(winner, new Message(MessageType.TOAST, "상대 연결이 끊겼어요. 잠시 후 게임을 끝낼게요"));
+        loop.schedule(() -> endGame(winner), LEFT_NOTICE_MS, TimeUnit.MILLISECONDS);
     }
 
     private void sendTo(int slot, Message m) {
