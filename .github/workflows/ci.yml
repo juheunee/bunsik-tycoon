@@ -1,0 +1,57 @@
+name: CI
+
+# main 대상 PR과 main 반영 후의 빌드, 테스트 검증
+on:
+  pull_request:
+    branches: [main]
+  push:
+    branches: [main]
+
+# 소스 조회만 허용하는 최소 권한
+permissions:
+  contents: read
+
+# 같은 PR에 새 Push가 오면 이전 실행 취소, main은 커밋마다 결과를 남기도록 취소 제외
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: ${{ github.event_name == 'pull_request' }}
+
+jobs:
+  build-and-test:
+    name: 빌드 및 테스트
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+
+    steps:
+      - name: 저장소 코드 확인
+        uses: actions/checkout@v6
+
+      - name: Java 21 설정
+        uses: actions/setup-java@v5
+        with:
+          distribution: temurin
+          java-version: '21'
+
+      # 화면 테스트(SessionScreenTest, VersusScreenTest)가 창을 띄우므로 가상 화면과 한글 글꼴 설치
+      - name: 가상 화면, 한글 글꼴 설치
+        run: |
+          sudo apt-get update
+          sudo apt-get install -y --no-install-recommends xvfb fonts-nanum
+
+      # 외부 라이브러리와 빌드 도구 없이 src, test 전체를 Java 21 기준으로 컴파일
+      - name: 빌드
+        run: |
+          mkdir -p out
+          find BunsikTycoon/src -name '*.java' > out/sources.txt
+          javac --release 21 -encoding UTF-8 -d out @out/sources.txt
+          find BunsikTycoon/test -name '*.java' > out/test-sources.txt
+          javac --release 21 -encoding UTF-8 -cp out -d out @out/test-sources.txt
+
+      # test 폴더의 ~Test 클래스를 모두 찾아 실행, 하나라도 실패하면 즉시 중단
+      - name: 테스트
+        run: |
+          for file in $(cd BunsikTycoon/test && find . -name '*Test.java' | sort); do
+            class=$(echo "${file#./}" | sed 's/\.java$//; s#/#.#g')
+            echo "== $class"
+            xvfb-run -a java -cp out "$class"
+          done
