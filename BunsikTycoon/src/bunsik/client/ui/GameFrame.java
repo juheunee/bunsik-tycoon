@@ -21,10 +21,13 @@ public final class GameFrame extends JFrame {
     private final Timer startTimeout = new Timer(10000, e -> showTitle("서버의 게임 시작 응답을 받지 못했습니다."));
     private final Timer readyTimeout = new Timer(10000, e -> showTitle("서버의 준비 상태 응답을 받지 못했습니다."));
     private int playerCount;
+    private boolean paused;
     private TitlePanel.Connection connection;
     public GameFrame(boolean preview) {
         super("도전! 분식왕");
         game=new GamePanel(this::send,()->showTitle("타이틀로 돌아왔습니다."));
+        // 일시정지 요청은 혼자 하기 영업 중에만 보내고, 실제 정지는 서버의 PAUSE 응답으로 반영
+        game.bind("P",false,()->{if(playerCount==1&&phase==Phase.PLAYING)send(new Message(MessageType.PAUSE,!paused));});
         startTimeout.setRepeats(false);
         readyTimeout.setRepeats(false);
         title=new TitlePanel(this::connect,preview ? ()->preview("식당") : null);
@@ -66,6 +69,7 @@ public final class GameFrame extends JFrame {
         game.setState(StoreSnapshot.empty());
         game.opponent(null);
         game.setVersus(false);
+        setPaused(false);
         game.names(settings.nickname(), "상대");
         game.notice("");
         title.status("서버 연결 중…");
@@ -90,7 +94,12 @@ public final class GameFrame extends JFrame {
     }
 
     private void updateInput() {
-        game.setBlocked(phase != Phase.PLAYING);
+        game.setBlocked(phase != Phase.PLAYING || paused);
+    }
+
+    private void setPaused(boolean value) {
+        paused = value;
+        game.setPaused(value);
     }
 
     private void onMessage(Message m) {
@@ -133,6 +142,7 @@ public final class GameFrame extends JFrame {
                     game.setState(StoreSnapshot.empty());
                     game.opponent(null);
                     game.setVersus(count == 2);
+                    setPaused(false);
                     phase = Phase.COUNTDOWN;
                     setTitle("도전! 분식왕");
                     game.names(m.get(slot + 2), count == 2 ? m.get(3 - slot) : "상대");
@@ -172,8 +182,10 @@ public final class GameFrame extends JFrame {
                     game.serverNotice(m.get(0));
                 }
                 case GAME_OVER -> {
-                    if (phase != Phase.PLAYING && phase != Phase.ENDING) return;
+                    // 카운트다운 중 상대가 끊기면 서버가 바로 결과를 보냄
+                    if (phase != Phase.COUNTDOWN && phase != Phase.PLAYING && phase != Phase.ENDING) return;
                     if (m.getInt(1) != playerCount) throw new IllegalArgumentException("Invalid result count");
+                    startTimeout.stop();
                     result.showResult(m, slot);
                     phase = Phase.RESULT;
                     updateInput();
@@ -183,6 +195,11 @@ public final class GameFrame extends JFrame {
                     show(result);
                 }
                 case REJECT -> { if (network != null) showTitle(m.get(0)); }
+                case PAUSE -> {
+                    if (phase != Phase.COUNTDOWN && phase != Phase.PLAYING && phase != Phase.ENDING) return;
+                    setPaused(m.getBool(0));
+                    updateInput();
+                }
                 default -> { }
             }
         } catch (IllegalArgumentException e) {
