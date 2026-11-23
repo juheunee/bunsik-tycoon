@@ -9,12 +9,15 @@ import java.io.IOException;
 import java.io.InputStreamReader;
 import java.io.OutputStreamWriter;
 import java.net.Socket;
+import java.net.SocketTimeoutException;
 import java.nio.charset.StandardCharsets;
 
 /** 클라이언트 한 명의 수신 스레드 */
 public final class ClientHandler implements Runnable {
 
     private static final int NICKNAME_MAX = 10;
+    /** 이 시간 동안 아무 메시지도 없으면 연결 끊김으로 판단 (클라이언트는 2초마다 PING) */
+    private static final int HEARTBEAT_TIMEOUT_MS = 6000;
 
     private final GameServer server;
     private final Socket socket;
@@ -32,6 +35,7 @@ public final class ClientHandler implements Runnable {
         this.socket = socket;
         this.id = id;
         this.nickname = "손님" + id;
+        socket.setSoTimeout(HEARTBEAT_TIMEOUT_MS);
         this.in = new BufferedReader(new InputStreamReader(socket.getInputStream(), StandardCharsets.UTF_8));
         this.out = new BufferedWriter(new OutputStreamWriter(socket.getOutputStream(), StandardCharsets.UTF_8));
     }
@@ -49,6 +53,8 @@ public final class ClientHandler implements Runnable {
                     server.log("잘못된 메시지 무시(" + nickname + "): " + line);
                 }
             }
+        } catch (SocketTimeoutException e) {
+            server.log("응답 없음(하트비트 시간 초과): " + nickname);
         } catch (IOException ignored) {
         } finally {
             close();
@@ -58,10 +64,19 @@ public final class ClientHandler implements Runnable {
 
     /** 메시지 처리 (false: 연결 종료) */
     private boolean handle(Message m) {
+        // PING은 연결 유지 확인용이라 수신 자체로 하트비트 시간이 초기화되고 처리할 내용은 없음
+        if (m.type() == MessageType.PING) {
+            return true;
+        }
+        if (!greeted && m.type() != MessageType.HELLO && m.type() != MessageType.LEAVE) {
+            server.log("HELLO 전 메시지 무시: " + m.type());
+            return true;
+        }
         switch (m.type()) {
             case HELLO -> {
-                if (room != null) {
-                    server.log("게임 중 HELLO 무시: " + nickname);
+                // 1P 다시 하기는 결과 후(방과 대기실 밖)의 HELLO라 여기에 걸리지 않음
+                if (room != null || server.lobby().contains(this)) {
+                    server.log("중복 HELLO 무시: " + nickname);
                     return true;
                 }
                 String name = sanitize(m.get(0));
