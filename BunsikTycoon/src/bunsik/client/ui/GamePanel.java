@@ -20,6 +20,7 @@ public final class GamePanel extends JPanel {
     private boolean left,blocked=true,versus,hideOpponent,hDown,spaceDown,noticeBeforeState;
     private String notice="서버 시작 대기 중",nickname="사장님",otherName="상대";
     private int countdown=-1;
+    private boolean paused;
     private final JButton exit, opponentButton;
     private record Interaction(Menu station, int table, String hint, boolean available, boolean cook) {
         Interaction(int table, String hint, boolean available) {
@@ -195,6 +196,7 @@ public final class GamePanel extends JPanel {
         opponentButton.setText(hideOpponent ? "상대 식당 보기" : "상대 식당 숨기기");
         repaint();
     }
+    public void setPaused(boolean value){paused=value;repaint();}
     public void countdown(int value){countdown=value;repaint();}
     public void setBlocked(boolean value){blocked=value;pressed.clear();if(value){clearPending();choosingDiscard=false;}}
     public void resetSessionInput(){clearInput();clearPending();hideOpponent=false;refreshOpponentButton();}
@@ -245,6 +247,8 @@ public final class GamePanel extends JPanel {
         } else drawStore(g,state,165,98,870,566,(int)x,(int)y,left,hint);
         Sprites.center(g,"방향키/WASD 이동   SPACE 조리 · 픽업 · 주문 · 서빙 · 청소   ESC 나가기"
                 +(versus?"   H 상대 식당 표시 전환":""),600,690,12,UiKit.CREAM);
+        // 서버 PAUSE 상태 표시 (서버 안내 문구는 정지 화면 위에 보이도록 먼저 그림)
+        if(paused){g.setColor(new Color(0,0,0,120));g.fillRect(0,92,1200,578);Sprites.center(g,versus?"잠시 멈춤":"일시 정지 (P: 계속)",600,400,40,Color.WHITE);}
         if(!notice.isEmpty()){Sprites.rounded(g,360,98,480,26,20,new Color(54,34,18,230),null);Sprites.center(g,notice,600,116,12,Sprites.YELLOW);}
         if(countdown>0){g.setColor(new Color(0,0,0,145));g.fillRect(0,92,1200,578);Sprites.center(g,""+countdown,600,422,135,Sprites.RED);Sprites.center(g,""+countdown,600,416,125,Sprites.YELLOW);Sprites.center(g,"손님이 곧 들어와요! 방향키로 움직이고 스페이스로 일해요",600,478,20,Color.WHITE);}
         g.dispose();
