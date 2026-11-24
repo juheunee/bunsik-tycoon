@@ -12,6 +12,7 @@ public final class GameFrame extends JFrame {
     private final GamePanel game;
     private final ResultPanel result;
     private final LobbyPanel lobby;
+    private final ChatPanel chat;
     private NetworkClient network;
     private int slot,myId,session;
     private enum Phase { IDLE, CONNECTING, LOBBY, COUNTDOWN, PLAYING, ENDING, RESULT }
@@ -26,6 +27,12 @@ public final class GameFrame extends JFrame {
     public GameFrame(boolean preview) {
         super("도전! 분식왕");
         game=new GamePanel(this::send,()->showTitle("타이틀로 돌아왔습니다."));
+        chat=new ChatPanel(this::sendChat,game::clearInput,()->game.requestFocusInWindow());
+        game.bind("ENTER",false,()->{if(isVersus())game.openChat();});
+        game.getInputMap(JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke("released ENTER"),"chat-enter-release");
+        game.getActionMap().put("chat-enter-release",new AbstractAction(){
+            @Override public void actionPerformed(java.awt.event.ActionEvent e){chat.enterReleased();}
+        });
         // 일시정지 요청은 혼자 하기 영업 중에만 보내고, 실제 정지는 서버의 PAUSE 응답으로 반영
         game.bind("P",false,()->{if(playerCount==1&&phase==Phase.PLAYING)send(new Message(MessageType.PAUSE,!paused));});
         startTimeout.setRepeats(false);
@@ -93,6 +100,12 @@ public final class GameFrame extends JFrame {
         }
     }
 
+    private void sendChat(Message message) {
+        if (!preview && network != null && isVersus()
+                && (phase == Phase.LOBBY || phase == Phase.COUNTDOWN
+                    || phase == Phase.PLAYING || phase == Phase.ENDING)) network.send(message);
+    }
+
     private void updateInput() {
         game.setBlocked(phase != Phase.PLAYING || paused);
     }
@@ -142,6 +155,11 @@ public final class GameFrame extends JFrame {
                     game.setState(StoreSnapshot.empty());
                     game.opponent(null);
                     game.setVersus(count == 2);
+                    if (count == 2) {
+                        chat.setGameMode(true);
+                        lobby.setChatPanel(null);
+                        game.setChatPanel(chat);
+                    }
                     setPaused(false);
                     phase = Phase.COUNTDOWN;
                     setTitle("도전! 분식왕");
@@ -195,6 +213,10 @@ public final class GameFrame extends JFrame {
                     show(result);
                 }
                 case REJECT -> { if (network != null) showTitle(m.get(0)); }
+                case CHAT -> {
+                    if (isVersus() && (phase == Phase.LOBBY || phase == Phase.COUNTDOWN
+                            || phase == Phase.PLAYING || phase == Phase.ENDING)) chat.append(m);
+                }
                 case PAUSE -> {
                     if (phase != Phase.COUNTDOWN && phase != Phase.PLAYING && phase != Phase.ENDING) return;
                     setPaused(m.getBool(0));
@@ -240,8 +262,12 @@ public final class GameFrame extends JFrame {
 
     private void openLobby() {
         phase = Phase.LOBBY;
+        game.setChatPanel(null);
+        chat.setGameMode(false);
+        lobby.setChatPanel(chat);
         setTitle("도전! 분식왕 · 경쟁 대기실");
         show(lobby);
+        SwingUtilities.invokeLater(() -> { if (phase == Phase.LOBBY) chat.input().requestFocusInWindow(); });
     }
 
     private void show(JPanel panel){setContentPane(panel);revalidate();repaint();}
@@ -261,6 +287,9 @@ public final class GameFrame extends JFrame {
         startTimeout.stop();
         readyTimeout.stop();
         lobby.reset();
+        game.setChatPanel(null);
+        lobby.setChatPanel(null);
+        chat.clear();
         if (network != null) {
             network.leave();
             network = null;
@@ -271,7 +300,8 @@ public final class GameFrame extends JFrame {
         disconnect();phase=Phase.IDLE;preview=true;setTitle("도전! 분식왕 · 화면 미리보기");slot=0;game.names("주흔","차민");game.opponent(null);game.resetSessionInput();game.setVersus(screen.equals("2P 식당"));
         if(screen.equals("시작")){title.reset("화면 미리보기 · 실제 접속은 서버 실행 후 모드를 선택하세요.");show(title);return;}
         if(screen.equals("결과")){result.showResult(new Message(MessageType.GAME_OVER,-2,1,"주흔:84:21:742:25"),0);result.setRetryEnabled(true);show(result);return;}
-        if(screen.equals("대기실")){lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);show(lobby);return;}
+        if(screen.equals("대기실")){lobby.update(new Message(MessageType.LOBBY,"1:주흔:true","2:차민:false"),1);chat.setGameMode(false);lobby.setChatPanel(chat);show(lobby);return;}
+        if(screen.equals("2P 식당")){chat.setGameMode(true);game.setChatPanel(chat);}
         var tables=java.util.List.of(new StoreSnapshot.TableView(TableState.WAITING_FOOD,Menu.TTEOKBOKKI,520,0,3),
             new StoreSnapshot.TableView(TableState.EATING,Menu.GIMBAP,-1,0,8),
             new StoreSnapshot.TableView(TableState.DIRTY,null,-1,41,0),

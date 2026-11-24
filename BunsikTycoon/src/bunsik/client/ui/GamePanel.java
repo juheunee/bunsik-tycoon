@@ -21,7 +21,9 @@ public final class GamePanel extends JPanel {
     private String notice="서버 시작 대기 중",nickname="사장님",otherName="상대";
     private int countdown=-1;
     private boolean paused;
-    private final JButton exit, opponentButton;
+    private final JButton exit, opponentButton, chatToggle;
+    private ChatPanel chat;
+    private boolean chatCollapsed;
     private record Interaction(Menu station, int table, String hint, boolean available, boolean cook) {
         Interaction(int table, String hint, boolean available) {
             this(null, table, hint, available, false);
@@ -123,6 +125,10 @@ public final class GamePanel extends JPanel {
         opponentButton.setFocusable(false);
         opponentButton.setVisible(false);
         add(opponentButton);
+        chatToggle=UiKit.button("채팅 접기 ▼",new Color(103,69,47),()->setChatCollapsed(!chatCollapsed));
+        chatToggle.setFocusable(false);
+        chatToggle.setVisible(false);
+        add(chatToggle);
         bind("ESCAPE",false,onExit);
         for(String key:new String[]{"UP","DOWN","LEFT","RIGHT","W","A","S","D"}) {
             bind(key,false,()->{if(choosingDiscard){chooseDiscard(key);return;}if(!blocked)pressed.add(key);});bind(key,true,()->pressed.remove(key));
@@ -146,7 +152,35 @@ public final class GamePanel extends JPanel {
     public void bind(String key,boolean release,Runnable action) {
         String id=(release?"release-":"press-")+key;
         getInputMap(WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke((release?"released ":"pressed ")+key),id);
-        getActionMap().put(id,new AbstractAction(){public void actionPerformed(ActionEvent e){action.run();}});
+        getActionMap().put(id,new AbstractAction(){public void actionPerformed(ActionEvent e){
+            if (chat != null && chat.isEditing()) return;
+            action.run();
+        }});
+    }
+    public void setChatPanel(ChatPanel next) {
+        if (chat == next) return;
+        if (chat != null) remove(chat);
+        chat = next;
+        chatCollapsed = false;
+        if (chat != null) add(chat);
+        chatToggle.setVisible(chat != null);
+        chatToggle.setText("채팅 접기 ▼");
+        revalidate(); repaint();
+    }
+    private void setChatCollapsed(boolean collapsed) {
+        if (chat == null) return;
+        if (collapsed && chat.isEditing()) chat.cancel();
+        chatCollapsed = collapsed;
+        chat.setVisible(!collapsed);
+        chatToggle.setText(collapsed ? "채팅 펼치기 ▲" : "채팅 접기 ▼");
+        revalidate(); repaint();
+        requestFocusInWindow();
+    }
+    public void openChat() {
+        if (chat == null) return;
+        if (chatCollapsed) setChatCollapsed(false);
+        clearInput();
+        chat.beginGameInput();
     }
     private void tick() {
         if(blocked||choosingDiscard)return;
@@ -206,6 +240,8 @@ public final class GamePanel extends JPanel {
         if (versus) UiKit.bounds(this,exit,924,16,120,30);
         else UiKit.bounds(this,exit,1060,64,120,26);
         UiKit.bounds(this,opponentButton,740,16,170,30);
+        UiKit.bounds(this,chatToggle,1060,chatCollapsed?630:473,130,28);
+        if (chat != null) UiKit.bounds(this,chat,870,505,320,155);
     }
     @Override public void addNotify(){super.addNotify();timer.start();}
     @Override public void removeNotify(){timer.stop();clearInput();super.removeNotify();}

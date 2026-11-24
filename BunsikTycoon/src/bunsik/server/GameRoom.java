@@ -1,6 +1,7 @@
 package bunsik.server;
 
 import bunsik.common.GameConfig;
+import bunsik.common.ChatMessages;
 import bunsik.common.Message;
 import bunsik.common.MessageType;
 import bunsik.server.game.Store;
@@ -141,7 +142,11 @@ public final class GameRoom {
     private void apply(Command c) {
         Message m = c.message();
         try {
-            if (m.type() == MessageType.PAUSE) {
+            if (m.type() == MessageType.CHAT) {
+                if (versus && !closing && connected[c.slot()].get()) {
+                    broadcast(ChatMessages.broadcast(players.get(c.slot()).id(), players.get(c.slot()).nickname(), m));
+                }
+            } else if (m.type() == MessageType.PAUSE) {
                 setPaused(m.getBool(0));
             } else if (pausedAt < 0) {
                 stores[c.slot()].handle(m, gameNow());

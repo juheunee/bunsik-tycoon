@@ -50,6 +50,11 @@ public final class VersusScreenTest {
                 check(onEdt(() -> frame.getContentPane() instanceof TitlePanel), "lobby requires WELCOME first");
                 out.println("LOBBY|27:Alpha:false");
                 waitFor(() -> frame.getContentPane() instanceof LobbyPanel);
+                ChatPanel chat = onEdt(() -> chat(frame));
+                onEdt(() -> { chat.input().setText("대기실 인사"); chat.input().postActionEvent(); return null; });
+                check("CHAT|대기실 인사".equals(in.readLine()), "lobby chat uses game socket");
+                out.println("CHAT|27|Alpha|대기실 인사");
+                waitFor(() -> chat.history().contains("대기실 인사"));
                 onEdt(() -> {
                     JButton ready = button(frame, "준비");
                     ready.doClick(0);
@@ -94,6 +99,16 @@ public final class VersusScreenTest {
                     out.println(snapshot(0, 9000, 32));
                     waitFor(() -> game.opponentState().gold() == 32);
                 }
+                onEdt(() -> {
+                    game.openChat();
+                    chat.enterReleased();
+                    chat.input().setText("경기 인사");
+                    chat.input().postActionEvent();
+                    return null;
+                });
+                check("CHAT|경기 인사".equals(in.readLine()), "playing chat uses game socket");
+                out.println("CHAT|27|Alpha|경기 인사");
+                waitFor(() -> chat.history().contains("경기 인사"));
                 onEdt(() -> {
                     action(game, "press-H");
                     action(game, "press-H");
@@ -245,6 +260,13 @@ public final class VersusScreenTest {
         JButton button = findButton(frame, label);
         if (button == null) throw new AssertionError("missing button: " + label);
         return button;
+    }
+
+    private static ChatPanel chat(GameFrame frame) {
+        for (Component component : frame.getContentPane().getComponents()) {
+            if (component instanceof ChatPanel panel) return panel;
+        }
+        throw new AssertionError("missing chat panel");
     }
 
     private static boolean enabled(GameFrame frame, String label) {
